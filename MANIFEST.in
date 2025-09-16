@@ -1,0 +1,2 @@
+recursive-include src/lunascope/ui *.ui
+include README.md LICENSE
