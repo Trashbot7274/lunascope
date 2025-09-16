@@ -1,22 +1,10 @@
 import pandas as pd
 import numpy as np
-from os import fspath
 import lunapi as lp
 
 from PySide6.QtWidgets import QApplication, QVBoxLayout, QTableView
-from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.figure import Figure
 
-class MplCanvas(FigureCanvas):
-    def __init__(self, parent=None):
-        fig = Figure()
-        self.ax = fig.add_subplot(111)
-        super().__init__(fig)
-        if parent is not None:
-            self.setParent(parent)
-
-import numpy as np
-from matplotlib import pyplot as plt
+from .mplcanvas import MplCanvas
 
 @staticmethod
 def hypno(ss, e=None, ax=None, *, title=None, xsize=20, ysize=2, clear=True):

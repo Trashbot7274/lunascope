@@ -184,6 +184,8 @@ class SListMixin:
         for r in range(df.shape[0]):
             for c in range(df.shape[1]):
                 v = df.iat[r, c]
+                print('dat',r,c, v,type(v))
+                print('----')
                 # stringify lists/sets for display
                 s = ", ".join(map(str, v)) if isinstance(v, (list, tuple, set)) else ("" if pd.isna(v) else str(v))
                 m.setItem(r, c, QStandardItem(s))

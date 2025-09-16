@@ -114,26 +114,33 @@ class SoapPopsMixin:
         # outputs
         df1 = self.p.table( 'RUN_POPS' )
         df2 = self.p.table( 'RUN_POPS' , 'SS' )
-        print(df1)
-        print(df2)
         
         # main output table (tbl_pops1)
         df = pd.DataFrame(columns=["Variable", "Value"])
 
-        print( 'has_staging' , has_staging )
+
         # concordance w/ any existing staging
         if has_staging:
-            df.loc[len(df)] = ['ACC3', df1.ACC3 ]
-            df.loc[len(df)] = ['K3', df1.K3 ]
-            df.loc[len(df)] = ['ACC', df1.ACC ]
-            df.loc[len(df)] = ['K', df1.K ]
-            print(df)
-        
-        df.loc[len(df)] = ['TWT (mins)', df2.loc[df2['SS'] == 'W', "PR1"].iloc[0] ]
-        df.loc[len(df)] = ['N1 (mins)', df2.loc[df2['SS'] == 'N1', "PR1"].iloc[0] ]
-        df.loc[len(df)] = ['N2 (mins)', df2.loc[df2['SS'] == 'N2', "PR1"].iloc[0] ]        
-        df.loc[len(df)] = ['N3 (mins)', df2.loc[df2['SS'] == 'N3', "PR1"].iloc[0] ]
-        df.loc[len(df)] = ['R (mins)', df2.loc[df2['SS'] == 'R', "PR1"].iloc[0] ]
+            row = df1.index[0]
+            df.loc[len(df)] = ['ACC3', df1.at[row,"ACC3"] ]
+            df.loc[len(df)] = ['K3', df1.at[row,"K3"] ]
+            df.loc[len(df)] = ['ACC', df1.at[row,"ACC"] ]
+            df.loc[len(df)] = ['K', df1.at[row,"K"] ]
+
+        v = df2.loc[df2['SS'].eq('W'), 'PR1']
+        df.loc[len(df)] = ['TWT (mins)', (float(v.iloc[0]) if not v.empty else np.nan)]
+
+        v = df2.loc[df2['SS'].eq('N1'), 'PR1']
+        df.loc[len(df)] = ['N1 (mins)', (float(v.iloc[0]) if not v.empty else np.nan)]
+
+        v = df2.loc[df2['SS'].eq('N2'), 'PR1']
+        df.loc[len(df)] = ['N2 (mins)', (float(v.iloc[0]) if not v.empty else np.nan)]
+
+        v = df2.loc[df2['SS'].eq('N3'), 'PR1']
+        df.loc[len(df)] = ['N3 (mins)', (float(v.iloc[0]) if not v.empty else np.nan)]
+
+        v = df2.loc[df2['SS'].eq('R'), 'PR1']
+        df.loc[len(df)] = ['R (mins)', (float(v.iloc[0]) if not v.empty else np.nan)]
 
         model = self.df_to_model( df )
         self.ui.tbl_pops1.setModel( model )

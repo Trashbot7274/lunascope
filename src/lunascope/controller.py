@@ -87,7 +87,7 @@ class Controller( QMainWindow,
         self._init_soap_pops()
         
         # redirect luna stderr
-        restore = redirect_fds_to_widget(self.ui.txt_out, fds=(1,2), label=False)
+#        restore = redirect_fds_to_widget(self.ui.txt_out, fds=(1,2), label=False)
 
         # menu items
         self.ui.menuView.addAction(self.ui.dock_slist.toggleViewAction())
@@ -112,17 +112,21 @@ class Controller( QMainWindow,
 
         self.ui.dock_help.hide()
         self.ui.dock_settings.hide()
-
-#        self.ui.setCorner(Qt.TopLeftCorner,     Qt.LeftDockWidgetArea)
-#        self.ui.setCorner(Qt.BottomLeftCorner,  Qt.LeftDockWidgetArea)
         self.ui.setCorner(Qt.TopRightCorner,    Qt.RightDockWidgetArea)
         self.ui.setCorner(Qt.BottomRightCorner, Qt.RightDockWidgetArea)
 
         w = self.ui.width()
-        self.ui.resizeDocks([ self.ui.dock_console , self.ui.dock_outputs ], [int(w*0.6), int(w*0.45)], Qt.Horizontal)
+
+        self.ui.resizeDocks([ self.ui.dock_console , self.ui.dock_outputs ],
+                            [int(w*0.6), int(w*0.45)], Qt.Horizontal)
+
         h = self.ui.height()
-        self.ui.resizeDocks([ self.ui.dock_sig , self.ui.dock_annot , self.ui.dock_annots ], [int(w*0.5), int(w*0.3), int(w*0.2)], Qt.Vertical )
-        self.ui.resizeDocks([ self.ui.dock_slist , self.ui.dock_header ], [int(w*0.7), int(w*0.3) ], Qt.Vertical )
+
+        self.ui.resizeDocks([ self.ui.dock_sig , self.ui.dock_annot , self.ui.dock_annots ],
+                            [int(w*0.5), int(w*0.3), int(w*0.2)], Qt.Vertical )
+
+        self.ui.resizeDocks([ self.ui.dock_slist , self.ui.dock_header ],
+                            [int(w*0.7), int(w*0.3) ], Qt.Vertical )
         
         # status bar
 
