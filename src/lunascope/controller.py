@@ -182,10 +182,14 @@ class Controller( QMainWindow,
         param = self._parse_tab_pairs( self.ui.txt_param )
         for p in param:
             self.proj.var( p[0] , p[1] )
-        
+
+        print( 't1' ) 
+
         # attach the individual
         self.p = self.proj.inst( current.row() + 1 )
-            
+
+        print( 't2' )
+                
         # and update some things
         self._update_metrics()
         self._render_histogram()

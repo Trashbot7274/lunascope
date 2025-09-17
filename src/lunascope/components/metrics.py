@@ -39,7 +39,7 @@ class MetricsMixin:
         if n == 0:
             self.ui.tbl_desc_signals.select_all_checks()
         else:
-            self.ui.tbl_desc_signals.select_none_checks()
+            self.ui.tbl_desc_signals.select_none_checks()        
         self._update_pg1()
 
     def _toggle_annots(self):
@@ -240,6 +240,9 @@ class MetricsMixin:
         # expand?
         left , right = expand_interval( left, right )
 
+        # set range and this should(?) update the plot
+        self.sel.setRange( left , right )
+        
         # update plot
         if self.rendered: self.on_window_range( left , right )
         
@@ -282,6 +285,13 @@ def expand_interval(left, right, *, factor=2.0, point_width=10.0, min_left=0.0):
     return L, R
 
 
+
+from typing import Iterable, Optional, Callable, List
+from PySide6 import QtCore
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QTableView, QHeaderView
+from PySide6.QtGui import QStandardItemModel, QStandardItem
+
 def add_check_column(
     view: QTableView,
     channel_col_before_insert: int,
@@ -289,17 +299,16 @@ def add_check_column(
     initial_checked: Optional[Iterable[str]] = None,
     on_change: Optional[Callable[[List[str]], None]] = None,
 ) -> None:
-
     model = view.model()
-
-    _squelch = False   # suppress per-item callbacks during bulk changes
-    
     if not isinstance(model, QStandardItemModel):
         raise TypeError("Model must be QStandardItemModel.")
+
+    _squelch = False  # guards the slot
 
     prev_sort = view.isSortingEnabled()
     view.setSortingEnabled(False)
 
+    # insert checkbox column at 0
     model.insertColumn(0)
     if header_text:
         model.setHeaderData(0, Qt.Horizontal, header_text)
@@ -308,6 +317,7 @@ def add_check_column(
     checked = set(map(str, initial_checked or []))
     chan_col_after = channel_col_before_insert + 1
 
+    # populate check items without emitting per-item signals
     model.blockSignals(True)
     try:
         for r in range(model.rowCount()):
@@ -322,35 +332,48 @@ def add_check_column(
     finally:
         model.blockSignals(False)
 
+    # single repaint helper
+    def _repaint_col0():
+        if not model.rowCount():
+            return
+        tl = model.index(0, 0)
+        br = model.index(model.rowCount() - 1, 0)
+        # keep squelch during emit to avoid any delegate feedback loops
+        nonlocal _squelch
+        was = _squelch
+        _squelch = True
+        try:
+            model.dataChanged.emit(tl, br, [Qt.CheckStateRole])
+        finally:
+            _squelch = was
+
+    # initial repaint so checkmarks show immediately
+    _repaint_col0()
+
     def _checked() -> List[str]:
-        out = []
+        out: List[str] = []
         for r in range(model.rowCount()):
             chk = model.item(r, 0)
             if chk and chk.checkState() == Qt.Checked:
                 out.append(str(model.data(model.index(r, chan_col_after))))
         return out
-    setattr(view, "checked", _checked )
-
-
-    def _repaint_col0():
-        if model.rowCount():
-            tl = model.index(0, 0)
-            br = model.index(model.rowCount() - 1, 0)
-            model.dataChanged.emit(tl, br, [Qt.CheckStateRole])
+    setattr(view, "checked", _checked)
 
     def _set_all(state: Qt.CheckState):
         nonlocal _squelch
         _squelch = True
+        blocker = QtCore.QSignalBlocker(model)  # suppress itemChanged during loop
         try:
             for r in range(model.rowCount()):
                 it = model.item(r, 0)
-                if it:
+                if it and it.checkState() != state:
                     it.setCheckState(state)
         finally:
+            del blocker
             _squelch = False
         _repaint_col0()
         if on_change:
-            on_change(_checked())   # once
+            on_change(_checked())  # single callback
 
     setattr(view, "select_all_checks", lambda: _set_all(Qt.Checked))
     setattr(view, "select_none_checks", lambda: _set_all(Qt.Unchecked))
@@ -359,33 +382,35 @@ def add_check_column(
         nonlocal _squelch
         xs = set(map(str, xs))
         _squelch = True
+        blocker = QtCore.QSignalBlocker(model)
         try:
             for r in range(model.rowCount()):
                 it = model.item(r, 0)
                 ch = str(model.data(model.index(r, chan_col_after)))
-                if it:
-                    it.setCheckState(Qt.Checked if ch in xs else Qt.Unchecked)
+                target = Qt.Checked if ch in xs else Qt.Unchecked
+                if it and it.checkState() != target:
+                    it.setCheckState(target)
         finally:
+            del blocker
             _squelch = False
         _repaint_col0()
         if on_change:
-            on_change(_checked())   # once
+            on_change(_checked())  # single callback
+
     setattr(view, "set", _set)
 
     def _on_item_changed(itm: QStandardItem):
-        if itm.column() != 0:
-            return
-        if _squelch:
+        if _squelch or itm.column() != 0:
             return
         if on_change:
-            on_change(_checked())   # per-click
-
+            on_change(_checked())  # per-click
 
     if not getattr(model, "_checkcol_connected", False):
         model.itemChanged.connect(_on_item_changed)
         setattr(model, "_checkcol_connected", True)
 
     view.setSortingEnabled(prev_sort)
+
 
     
 

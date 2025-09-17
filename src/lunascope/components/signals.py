@@ -197,13 +197,13 @@ class SignalsMixin:
         pi.plot([0, self.ns], [0.01, 0.01], pen=pg.mkPen(0, 0, 0 ))
         
         # wire up range selector
-        sel = XRangeSelector(h, bounds=(0, self.ns),
+        self.sel = XRangeSelector(h, bounds=(0, self.ns),
                              integer=True,
                              click_span=30.0,     
                              min_span=5.0,
                              step=30, big_step=300 )
         
-        sel.rangeSelected.connect(self.on_window_range)  
+        self.sel.rangeSelected.connect(self.on_window_range)  
         
 
     # --------------------------------------------------------------------------------
@@ -730,6 +730,11 @@ class SignalsMixin:
         x1 = self.ssa.get_window_left()
         x2 = self.ssa.get_window_right()
 
+        # if 1+ signals, do not allow large windows
+        if len(chs) != 0 and x2 - x1 > 30:
+            self.sel.setRange(x1, x1+30)
+            return
+        
         # get canvas
         pw = self.ui.pg1
         vb = pw.getPlotItem().getViewBox()
@@ -1153,6 +1158,14 @@ class XRangeSelector(QtCore.QObject):
             try: s.setParent(None)
             except Exception: pass
             
+    # programmatically set range
+    def setRange(self, lo: float, hi: float, emit: bool = True):
+        lo, hi = self._enforce_span_limits(lo, hi)
+        self._set_region_silent(lo, hi)
+        self.region.show()
+        self.wid.setFocus()
+        if emit:
+            self._schedule_emit(lo, hi)
 
 
 

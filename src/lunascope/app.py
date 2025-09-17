@@ -49,7 +49,7 @@ def main(argv=None) -> int:
     controller = Controller(ui, proj)
 
     if args.slist_file:
-        controller._read_slist_from_file(Path(args.slist_file))
+        controller._read_slist_from_file( args.slist_file )
 
     try:
         return app.exec()
