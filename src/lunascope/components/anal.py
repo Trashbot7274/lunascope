@@ -70,10 +70,14 @@ class AnalMixin:
         param = self._parse_tab_pairs( self.ui.txt_param )
         for p in param:
             self.proj.var( p[0] , p[1] )
-        
+            
         # execute the command
-        self.p.eval( inp )
-
+        try:
+            self.p.eval( inp )
+        except Exception as e:
+            # print("CAUGHT in slot:", repr(e), type(e))
+            print("Bad input:", e)
+        
         # get the output
         tbls = self.p.strata()
 
