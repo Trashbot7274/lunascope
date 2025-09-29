@@ -2,7 +2,7 @@ import lunapi as lp
 import pandas as pd
 
 from typing import List, Tuple
-from PySide6.QtWidgets import QPlainTextEdit  
+from PySide6.QtWidgets import QPlainTextEdit, QFileDialog, QMessageBox
 
 import sys, traceback
 from PySide6.QtCore import QObject, Signal
@@ -113,7 +113,24 @@ class AnalMixin:
 
         
     def _load_luna(self):
-        pass
+        txt_file, _ = QFileDialog.getOpenFileName(
+            self.ui,
+            "Open Luna script",
+            "",
+            "Text (*.txt);;All Files (*)",
+            options=QFileDialog.Option.DontUseNativeDialog
+        )
+        try:
+            text = open(txt_file, "r", encoding="utf-8").read()
+            self.ui.txt_inp.setPlainText(text)
+        except (UnicodeDecodeError, OSError) as e:
+            QMessageBox.critical(
+                None,
+                "Error opening Luna script",
+                f"Could not load {txt_file}\nException: {type(e).__name__}: {e}"
+            )
+
+
 
     def _save_luna(self):
         pass

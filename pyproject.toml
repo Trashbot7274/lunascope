@@ -15,7 +15,7 @@ authors = [
   {name = "Nataliia Kozhemiako", email = "nkozhemiako@bwh.harvard.edu"} ]
 
 dependencies = [
- "lunapi>=1.3.0",
+ "lunapi>=1.3.2",
  "PySide6==6.9.2",
  "pyqtgraph==0.13.7",
  "numpy",

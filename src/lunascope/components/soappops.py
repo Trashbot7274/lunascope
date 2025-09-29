@@ -1,8 +1,8 @@
 
 
-from PySide6.QtWidgets import QApplication, QVBoxLayout, QTableView
+from PySide6.QtWidgets import QApplication, QVBoxLayout, QTableView, QMessageBox
 from PySide6.QtCore import Qt
-
+import os
 from .mplcanvas import MplCanvas
 from .plts import hypno_density
 import pandas as pd
@@ -108,8 +108,27 @@ class SoapPopsMixin:
             ignore_obs = True
         
         # run POPS
-        cmd_str = 'EPOCH align & RUN-POPS sig=' + pops_chs + ' path=' + pops_path + ' model=' + pops_model 
-        self.p.eval( cmd_str )
+        #test if file exists
+        pops_mod = os.path.join( pops_path, pops_model+".mod")
+        if not os.path.exists(pops_mod):
+            QMessageBox.critical(
+                None,
+                "FATAL ERROR HAS OCCURRED",
+                "Could not open POPS files"
+            )
+            return None
+
+
+
+        try:
+            cmd_str = 'EPOCH align & RUN-POPS sig=' + pops_chs + ' path=' + pops_path + ' model=' + pops_model
+            self.p.eval( cmd_str )
+        except (RuntimeError) as e:
+            QMessageBox.critical(
+                None,
+                "Error running POPS",
+                f"Exception: {type(e).__name__}: {e}"
+            )
 
         # outputs
         df1 = self.p.table( 'RUN_POPS' )
