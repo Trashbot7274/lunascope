@@ -677,14 +677,23 @@ class SignalsMixin:
             a0, a1 = _ensure_min_px_width( vb, a0, a1, px=1)  # 1-px minimum
             self.annot_mgr.update_track( ann , x0 = a0 , x1 = a1 , y0 = y0 , y1 = y1 )
             # labels
-            yv[idx] = ( y0[0] * 2 + y1[0]  ) / 3.0 
-            tv[idx] = ann
+            yv[idx] = ( y0[0] * 2 + y1[0]  ) / 3.0
+            if ann and str(ann).strip():
+                tv[idx] = ann
+            else:
+                tv[idx] = ""
             idx = idx + 1
             aidx = aidx + 1
 
-        # add labels
-        self.labs.setData( xv , yv , tv )
-            
+        xv2, yv2, tv2 = [], [], []
+        for x, y, t in zip(xv, yv, tv):
+            if t and str(t).strip():  # keep only non-empty labels
+                xv2.append(x)
+                yv2.append(y)
+                tv2.append(t)
+
+        self.labs.setData(xv2, yv2, tv2)
+
         # gaps (list of (start,stop) values
         gaps = self.ss.get_gaps()
         x0 =  [ x[0] for x in gaps ]
@@ -796,8 +805,16 @@ class SignalsMixin:
             aidx = aidx + 1
 
         # add labels
-        self.labs.setData( xv , yv , tv )
-            
+        # filter out empty/blank labels before drawing
+        xv2, yv2, tv2 = [], [], []
+        for x, y, t in zip(xv, yv, tv):
+            if t and str(t).strip():  # keep only non-empty labels
+                xv2.append(x)
+                yv2.append(y)
+                tv2.append(t)
+
+        self.labs.setData(xv2, yv2, tv2)
+
         # gaps (list of (start,stop) values
         gaps = self.ssa.get_gaps()
         x0 =  [ x[0] for x in gaps ]
@@ -1313,7 +1330,12 @@ class TrackManager:
         # remove old
         if name in self.tracks:
             self.plot.removeItem(self.tracks[name]["item"])
-
+        '''
+        valid = (np.abs(x1 - x0) > 1e-6) & (np.abs(y1 - y0) > 1e-6)
+        if not np.any(valid):
+            return
+        x0, x1, y0, y1 = x0[valid], x1[valid], y0[valid], y1[valid]
+        '''
         item = pg.BarGraphItem(
             x0=x0, x1=x1, y0=y0, y1=y1,
             brush=color, pen=pen, name=name
