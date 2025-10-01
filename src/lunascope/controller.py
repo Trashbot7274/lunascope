@@ -183,7 +183,7 @@ class Controller( QMainWindow,
         for p in param:
             self.proj.var( p[0] , p[1] )
 
-        print( 't1' ) 
+        print( 't1' )
 
         # attach the individual
         self.p = self.proj.inst( current.row() + 1 )
