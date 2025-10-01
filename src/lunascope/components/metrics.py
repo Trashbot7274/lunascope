@@ -195,7 +195,6 @@ class MetricsMixin:
                 "start": pd.to_numeric(b[0], errors="coerce"),
                 "stop":  pd.to_numeric(b[1], errors="coerce"),
             }).sort_values("start", ascending=True, na_position="last")
-
         self.events_model = self.df_to_model(df)
 
         self.events_table_proxy = QSortFilterProxyModel(self)
