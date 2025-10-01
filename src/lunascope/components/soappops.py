@@ -113,8 +113,8 @@ class SoapPopsMixin:
         if not os.path.exists(pops_mod):
             QMessageBox.critical(
                 None,
-                "FATAL ERROR HAS OCCURRED",
-                "Could not open POPS files"
+                "Error",
+                "Could not open POPS files; double check file path"
             )
             return None
 

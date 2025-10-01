@@ -120,20 +120,36 @@ class AnalMixin:
             "Text (*.txt);;All Files (*)",
             options=QFileDialog.Option.DontUseNativeDialog
         )
-        try:
-            text = open(txt_file, "r", encoding="utf-8").read()
-            self.ui.txt_inp.setPlainText(text)
-        except (UnicodeDecodeError, OSError) as e:
-            QMessageBox.critical(
-                None,
-                "Error opening Luna script",
-                f"Could not load {txt_file}\nException: {type(e).__name__}: {e}"
-            )
+        if txt_file:
+            try:
+                text = open(txt_file, "r", encoding="utf-8").read()
+                self.ui.txt_inp.setPlainText(text)
+            except (UnicodeDecodeError, OSError) as e:
+                QMessageBox.critical(
+                    None,
+                    "Error opening Luna script",
+                    f"Could not load {txt_file}\nException: {type(e).__name__}: {e}"
+                )
 
 
 
     def _save_luna(self):
-        pass
+        new_file = self.ui.txt_inp.toPlainText()
+
+        filename, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Luna Script To txt",
+            "",
+            "Text Files (*.txt);;All Files (*)"
+        )
+
+        if filename:
+            # Ensure .txt extension if none was given
+            if not filename.endswith(".txt"):
+                filename += ".txt"
+
+            with open(filename, "w", encoding="utf-8") as f:
+                f.write(new_file)
 
     def _update_table(self, cmd , stratum ):
         
