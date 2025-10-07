@@ -25,10 +25,6 @@ class SignalsMixin:
         h.showAxis('bottom', False)
         h.setMenuEnabled(False)
         h.setMouseEnabled(x=False, y=False)
-
-#        vb = self.ui.pgh.getPlotItem().getViewBox()
-#        vb.setFocusPolicy(QtC.Qt.StrongFocus)
-#        self.ui.pgh.setFocusProxy(vb)
         
         # pg1 - main signals
         # pgh - hypnogram, controls view on pg1
@@ -47,8 +43,20 @@ class SignalsMixin:
         vb = pw.getViewBox()
         vb.enableAutoRange('x', False)
         vb.enableAutoRange('y', False)
-#        vb.setMouseEnabled(x=False, y=False)
 
+        # disable mouse pan/zoom
+        vb.setMouseEnabled(x=False, y=False)   # disables drag + wheel zoom
+        vb.wheelEvent = lambda ev: None        # belt-and-suspenders on some styles
+        vb.mouseDragEvent = lambda ev: None
+        vb.setMenuEnabled(False)               # optional: no context menu
+
+        pi = pw.getPlotItem()
+        pi.enableAutoRange('xy', False)   # or: pi.disableAutoRange()
+        pi.autoBtn.hide()                 # prevents UI trigger
+        pi.disableAutoRange()
+        pi.hideButtons()          # use this, not pi.autoBtn.hide()
+        
+        # cols
         self.stgcols_hex = {
             'N1': '#20B2DA',  # rgba(32,178,218,1)
             'N2': '#0000FF',  # blue
@@ -69,32 +77,8 @@ class SignalsMixin:
         self.ui.radio_fixedscale.clicked.connect( self._update_scaling )
         self.ui.radio_clip.clicked.connect( self._update_scaling )
         self.ui.radio_empiric.clicked.connect( self._update_scaling )
-
-        # ---- TODO --- 
-
-        # syncing between hypno and pg1
+        self.ui.check_labels.clicked.connect( self._update_labels )
         
-        # assume: top_lri: pg.LinearRegionItem on top plot
-        #         bot_pi: pg.PlotItem for the second plot
-    # prefer finished signals to cut chatter
-    # Notes:
-    # Use sigRegionChanged if you want live updates while dragging.
-    # If you programmatically change the second plot elsewhere, either emit a signal or just call bot_to_lri() after setXRange.
-
-        
-
-#        self.ui.pg1.getViewBox().sigXRangeChanged.connect( lambda *args: self.bot_to_lri() )
-
-
-#    def bot_to_lri(self ):
-#        global syncing
-#        if syncing: return
-#        self.syncing = True
-#        x0, x1 = self.ui.pg1.getViewBox().viewRange()[0]   # vb = ViewBox
-#        self.ui.pgh.setRegion((x0, x1))
-#        syncing = False
-
-
 
 
         
@@ -122,6 +106,9 @@ class SignalsMixin:
         # number of scope-epochs (i.e. fixed at 0, 30s), and seconds
         self.ne = int( nsecs_clk / scope_epoch_sec )
         self.ns = nsecs_clk
+
+        # option defaults
+        self.show_labels = True
         
         # ------------------------------------------------------------
         # hypnogram init
@@ -196,10 +183,18 @@ class SignalsMixin:
         # segment plotter
         pi.plot([0, self.ns], [0.01, 0.01], pen=pg.mkPen(0, 0, 0 ))
         
-        # wire up range selector
+        # wire up range selector (first wiping existing one, if needed)
+
+        if getattr(self, "sel", None) is not None:
+            try:
+                self.sel.dispose()
+            except Exception:
+                pass
+            self.sel = None
+        
         self.sel = XRangeSelector(h, bounds=(0, self.ns),
                              integer=True,
-                             click_span=30.0,     
+                             click_span=30.0,
                              min_span=5.0,
                              step=30, big_step=300 )
         
@@ -525,6 +520,23 @@ class SignalsMixin:
 
     # --------------------------------------------------------------------------------
     #
+    # labels
+    #
+    # --------------------------------------------------------------------------------
+
+    def _update_labels(self):
+
+        # labels?
+        if self.ui.check_labels.isChecked():
+            self.show_labels = True
+        else:
+            self.show_labels = False
+            
+        # redraw
+        self._update_pg1()
+
+    # --------------------------------------------------------------------------------
+    #
     # handle y-axis scaling
     #
     # --------------------------------------------------------------------------------
@@ -542,7 +554,6 @@ class SignalsMixin:
 
         if len(self.ss_chs) == 0:
             self.pg1_annot_height = 0.8
-
 
         # use empirical vals (default) 
         if self.ui.radio_empiric.isChecked():
@@ -581,7 +592,7 @@ class SignalsMixin:
         else:
             yannot = 1 - self.pg1_footer_height - self.pg1_header_height 
 
-        print('ns',ns,'na',na,'yannot', yannot )
+#        print('ns',ns,'na',na,'yannot', yannot )
         
         self.ss.set_scaling( ns, na,  yscale , yspacing ,
                              self.pg1_header_height,
@@ -653,9 +664,10 @@ class SignalsMixin:
             x = self.ss.get_timetrack( ch )
             y = self.ss.get_scaled_signal( ch , idx )            
             self.curves[idx].setData(x, y)            
-            # labels
+            # labels            
             ylim = self.ss.get_window_phys_range( ch )
-            tv[idx] = ' ' + ch + ' ' + str(round(ylim[0],3)) + ':' + str(round(ylim[1],3)) + ' (' + self.units[ ch ] +')'
+            if self.show_labels:
+                tv[idx] = ' ' + ch + ' ' + str(round(ylim[0],3)) + ':' + str(round(ylim[1],3)) + ' (' + self.units[ ch ] +')'
             yv[idx] = self.ss.get_ylabel( idx ) 
             # next
             idx = idx + 1
@@ -678,10 +690,9 @@ class SignalsMixin:
             self.annot_mgr.update_track( ann , x0 = a0 , x1 = a1 , y0 = y0 , y1 = y1 )
             # labels
             yv[idx] = ( y0[0] * 2 + y1[0]  ) / 3.0
-            if ann and str(ann).strip():
-                tv[idx] = ann
-            else:
-                tv[idx] = ""
+            if self.show_labels: 
+                if ann and str(ann).strip():
+                    tv[idx] = ann
             idx = idx + 1
             aidx = aidx + 1
 
@@ -777,7 +788,8 @@ class SignalsMixin:
             self.curves[idx].setData(x, y)
             # labels
             ylim = [ mn , mx ] 
-            tv[idx] = ' ' + ch + ' ' + str(round(ylim[0],3)) + ':' + str(round(ylim[1],3)) + ' (' + self.units[ ch ] +')'
+            if self.show_labels:
+                tv[idx] = ' ' + ch + ' ' + str(round(ylim[0],3)) + ':' + str(round(ylim[1],3)) + ' (' + self.units[ ch ] +')'
             yv[idx] = ybase
             # next
             idx = idx + 1
@@ -800,7 +812,9 @@ class SignalsMixin:
             self.annot_mgr.update_track( ann , x0 = a0 , x1 = a1 , y0 = y0 , y1 = y1 )
             # labels
             yv[idx] = ( y0[0] * 2 + y1[0]  ) / 3.0 
-            tv[idx] = ann
+
+            if self.show_labels: tv[idx] = ann
+
             idx = idx + 1
             aidx = aidx + 1
 
@@ -819,8 +833,8 @@ class SignalsMixin:
         gaps = self.ssa.get_gaps()
         x0 =  [ x[0] for x in gaps ]
         x1 =  [ x[1] for x in gaps ]
-        y0 =  [ 0.05 for x in gaps ]
-        y1 =  [ 0.90 for x in gaps ]
+        y0 =  [ 0.04 for x in gaps ]
+        y1 =  [ 0.96 for x in gaps ]
         gaps = self.annot_mgr.update_track( "__#gaps__" ,x0 = x0 , x1 = x1 , y0 = y0 , y1 = y1 )
             
         # clock-ticks                                                                                                          
@@ -835,9 +849,6 @@ class SignalsMixin:
 
         
 # ------------------------------------------------------------
-
-from PySide6 import QtCore, QtGui
-import pyqtgraph as pg
 
 from PySide6 import QtCore, QtGui
 import pyqtgraph as pg
@@ -891,7 +902,8 @@ class XRangeSelector(QtCore.QObject):
         self._anchor_x = None
         self._move_width = None
         self._move_offset = 0.0
-
+        self._disposed = False
+        
         # coalesced emitter
         self._emit_timer = QtCore.QTimer(self)
         self._emit_timer.setSingleShot(True)
@@ -1028,6 +1040,66 @@ class XRangeSelector(QtCore.QObject):
             self._last_emitted = self._pending
             self.rangeSelected.emit(*self._pending)
 
+    def dispose(self):
+        if getattr(self, "_disposed", False):
+            return
+        self._disposed = True
+
+        scene = None
+        try:
+            scene = self.pi.scene()
+        except Exception:
+            scene = None
+        if scene is not None:
+            try:
+                scene.removeEventFilter(self)
+            except Exception:
+                pass
+
+        if getattr(self, "region", None) is not None:
+            try:
+                self.pi.removeItem(self.region)
+            except Exception:
+                pass
+            try:
+                self.region.setParentItem(None)
+            except Exception:
+                pass
+            try:
+                self.region.deleteLater()
+            except Exception:
+                pass
+            self.region = None
+
+        sc_list = getattr(self, "_sc", None)
+        if sc_list is not None:
+            for sc in sc_list:
+                try:
+                    sc.activated.disconnect()
+                except Exception:
+                    pass
+                try:
+                    sc.setParent(None)
+                except Exception:
+                    pass
+                try:
+                    sc.deleteLater()
+                except Exception:
+                    pass
+            sc_list.clear()
+
+        if getattr(self, "_emit_timer", None) is not None:
+            try:
+                self._emit_timer.stop()
+            except Exception:
+                pass
+
+        try:
+            QtCore.QObject.deleteLater(self)
+        except Exception:
+            pass
+
+            
     # ---------- mouse (event filter) ----------
     def eventFilter(self, obj, ev):
         if obj is not self.pi.scene():

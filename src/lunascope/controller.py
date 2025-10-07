@@ -18,6 +18,7 @@ from .components.ctree import CTreeMixin
 from .components.spectrogram import SpecMixin
 from .components.soappops import SoapPopsMixin
 
+
 class _FdPump(QObject):
     line = Signal(str)
     
@@ -77,7 +78,7 @@ class Controller( QMainWindow,
         self.proj = proj
         self._init_slist()
         self._init_metrics()
-        self._init_hypno()        
+        self._init_hypno()
         self._init_anal()
         self._init_signals()
         self._init_settings()
@@ -85,7 +86,7 @@ class Controller( QMainWindow,
         self._init_ctree()
         self._init_spec()
         self._init_soap_pops()
-        
+
         # redirect luna stderr
 #        restore = redirect_fds_to_widget(self.ui.txt_out, fds=(1,2), label=False)
 
@@ -94,6 +95,7 @@ class Controller( QMainWindow,
         self.ui.menuView.addAction(self.ui.dock_header.toggleViewAction())
         self.ui.menuView.addSeparator()
         self.ui.menuView.addAction(self.ui.dock_sig.toggleViewAction())
+        self.ui.menuView.addAction(self.ui.dock_sigprop.toggleViewAction())
         self.ui.menuView.addAction(self.ui.dock_annot.toggleViewAction())
         self.ui.menuView.addAction(self.ui.dock_annots.toggleViewAction())
         self.ui.menuView.addSeparator()
@@ -112,6 +114,7 @@ class Controller( QMainWindow,
 
         self.ui.dock_help.hide()
         self.ui.dock_settings.hide()
+                
         self.ui.setCorner(Qt.TopRightCorner,    Qt.RightDockWidgetArea)
         self.ui.setCorner(Qt.BottomRightCorner, Qt.RightDockWidgetArea)
 
@@ -120,10 +123,20 @@ class Controller( QMainWindow,
         self.ui.resizeDocks([ self.ui.dock_console , self.ui.dock_outputs ],
                             [int(w*0.6), int(w*0.45)], Qt.Horizontal)
 
+        self.ui.dock_console.hide()
+        self.ui.dock_outputs.hide()
+
+        # right
         h = self.ui.height()
 
-        self.ui.resizeDocks([ self.ui.dock_sig , self.ui.dock_annot , self.ui.dock_annots ],
-                            [int(w*0.5), int(w*0.3), int(w*0.2)], Qt.Vertical )
+        self.ui.dock_sigprop.hide()
+        
+        self.ui.resizeDocks([ self.ui.dock_sig, self.ui.dock_annot, self.ui.dock_annots ] , 
+                            [int(h*0.5), int(h*0.4), int(h*0.1) ],
+                            Qt.Vertical)
+
+        
+        # left side
 
         self.ui.resizeDocks([ self.ui.dock_slist , self.ui.dock_header ],
                             [int(w*0.7), int(w*0.3) ], Qt.Vertical )
@@ -163,6 +176,8 @@ class Controller( QMainWindow,
         sb.addPermanentWidget(vsep(),0)
 
         self.sb_render.setText( "Rendered: F" );
+    
+        self.ui.resize(1200, 800)
 
         
     # ------------------------------------------------------------
@@ -183,12 +198,8 @@ class Controller( QMainWindow,
         for p in param:
             self.proj.var( p[0] , p[1] )
 
-        print( 't1' )
-
         # attach the individual
         self.p = self.proj.inst( current.row() + 1 )
-
-        print( 't2' )
                 
         # and update some things
         self._update_metrics()
@@ -379,6 +390,8 @@ def add_dock_shortcuts(win, view_menu):
             act.setShortcut("Ctrl+8")
         elif act.text() == "(9) Outputs":
             act.setShortcut("Ctrl+9")
+        elif act.text() == "(/) Signal properties":
+            act.setShortcut("Ctrl+/")
         elif act.text() == "(-) Commands":
             act.setShortcut("Ctrl+-")
 #            act.setShortcut(QKeySequence(Qt.CTRL | Qt.Key_Question))

@@ -7,11 +7,15 @@ from .mplcanvas import MplCanvas
 from .plts import hypno_density
 import pandas as pd
 
+import os
+from pathlib import Path
+
+        
 class SoapPopsMixin:
 
     def _has_staging(self):
         if not hasattr(self, "p"): return False
-        self.p.eval( 'CONTAINS stages' )
+        res = self.p.silent_proc( 'CONTAINS stages' )
         df = self.p.table( 'CONTAINS' )
         has_staging = df.at[df.index[0], "STAGES"] == 1
         return has_staging
@@ -108,16 +112,21 @@ class SoapPopsMixin:
             ignore_obs = True
         
         # run POPS
+
         #test if file exists
-        pops_mod = os.path.join( pops_path, pops_model+".mod")
-        if not os.path.exists(pops_mod):
+        # pops_mod = os.path.join( pops_path, pops_model+ ".mod")
+        # make more robust - and expand ~ --> user dir
+        base = Path(pops_path).expanduser()
+        base = Path(os.path.expandvars(str(base))).resolve()   # absolute
+        pops_mod = base / f"{str(pops_model).strip()}.mod"
+
+        if not pops_mod.is_file():
             QMessageBox.critical(
                 None,
                 "Error",
                 "Could not open POPS files; double check file path"
             )
             return None
-
 
 
         try:

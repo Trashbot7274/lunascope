@@ -67,13 +67,13 @@ class HypnoMixin:
         self.hypnocanvas.draw_idle()
 
         # get details
-        self.p.eval( 'EPOCH align & HYPNO' )
+        res = self.p.silent_proc( 'EPOCH align & HYPNO' )
 
         df1 = self.p.table( 'HYPNO' )
         df2 = self.p.table( 'HYPNO' , 'SS' )
         df3 = self.p.table( 'HYPNO' , 'C' )
         df4 = self.p.table( 'HYPNO' , 'E' )
-        print(df1)
+#        print(df1)
         
         # channel details
 #        df = self.p.table( 'HEADERS' , 'CH' )        

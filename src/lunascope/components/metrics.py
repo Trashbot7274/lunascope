@@ -10,6 +10,15 @@ from PySide6.QtGui import QStandardItemModel, QStandardItem
 from PySide6.QtCore import QModelIndex
 from PySide6.QtCore import Qt, QItemSelection, QSortFilterProxyModel, QRegularExpression
 
+import sys
+
+from dataclasses import dataclass
+
+from PySide6.QtCore import Qt, QAbstractTableModel, QModelIndex, QPoint, Signal
+from PySide6.QtGui import QColor
+from PySide6.QtWidgets import (
+    QApplication, QMainWindow, QTableView, QDockWidget, QWidget, QFormLayout,
+    QHBoxLayout, QVBoxLayout, QSpinBox, QComboBox, QCheckBox, QLabel, QColorDialog )
 
     
 class MetricsMixin:
@@ -27,7 +36,11 @@ class MetricsMixin:
         h.setStretchLastSection(False)
         h.setMinimumSectionSize(50)
         h.setDefaultSectionSize(150)
-        view.resizeColumnsToContents()  
+        view.resizeColumnsToContents()
+
+        view.setSelectionBehavior(QAbstractItemView.SelectRows)
+        view.setSelectionMode(QAbstractItemView.SingleSelection)
+
         
         # wiring
         self.ui.butt_sig.clicked.connect( self._toggle_sigs )
@@ -83,8 +96,8 @@ class MetricsMixin:
         self.ui.lbl_edftype.setText( "EDF type: " + v1 )
 
         v1 = df.iloc[0, df.columns.get_loc('REC_DUR_SEC')]
-        self.ui.lbl_dur.setText( f"Duration (s): {v1}" )
-
+        self.ui.lbl_dur.setText( f"Duration (s): {float(v1):.1f}")
+        
         v1a = self.p.annots().size
         v1s = df.iloc[0, df.columns.get_loc('NS')]
         self.ui.lbl_nsigs.setText( f"# sigs, annots: {v1s}, {v1a}" )
@@ -112,7 +125,7 @@ class MetricsMixin:
         # ------------------------------------------------------------
 
         df = self.p.table( 'HEADERS' , 'CH' )        
-        df = df[ [ 'CH' , 'PDIM' , 'SR' , 'PMIN', 'PMAX' ] ]
+        df = df[ [ 'CH' , 'PDIM' , 'SR' ] ]
         model = self.df_to_model( df )
         self.ui.tbl_desc_signals.setModel( model )
 
@@ -120,7 +133,7 @@ class MetricsMixin:
         view.verticalHeader().setVisible(False)
         view.resizeColumnsToContents()
 
-        view.setSortingEnabled(False)  # manual order UI
+        view.setSortingEnabled(False)
 
         add_check_column(
             view,
@@ -455,4 +468,3 @@ def enable_row_dnd(view: QTableView) -> None:
     view.setAcceptDrops(True)
     view.setDropIndicatorShown(True)
 
-    
