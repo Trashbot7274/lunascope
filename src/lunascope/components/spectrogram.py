@@ -3,6 +3,10 @@ import lunapi as lp
 
 from PySide6.QtWidgets import QApplication, QVBoxLayout, QTableView
 
+from PySide6.QtCore import QObject, Signal, QThread
+from PySide6.QtWidgets import QMainWindow, QProgressBar, QStatusBar
+
+
 from .mplcanvas import MplCanvas
 from .plts import plot_hjorth, plot_spec
 
@@ -30,23 +34,27 @@ class SpecMixin:
     # Caclculate a spectrogram
     # ------------------------------------------------------------
 
+        
     def _calc_spectrogram(self):
 
         # get current channel
         ch = self.ui.combo_spectrogram.currentText()
-
+        
         # check it still exists in the in-memory EDF
         if ch not in self.p.edf.channels():
             return
-        
-        # plot
+
         plot_spec( ch , ax=self.spectrogramcanvas.ax , p = self.p , gui = self.ui )
+
         self.spectrogramcanvas.draw_idle()
+
+        
+        
 
     def _calc_hjorth(self):
         ch = self.ui.combo_spectrogram.currentText()
 
-        # check it still exists in the in-memory EDF                                                                                                                     
+        # check it still exists in the in-memory EDF                                          
         if ch not in self.p.edf.channels():
             return
 
@@ -55,13 +63,6 @@ class SpecMixin:
 
     
     
-
-
-
-       
-
-    
-
 
 
 

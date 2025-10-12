@@ -2,7 +2,9 @@
 import pandas as pd
 import numpy as np
 from os import fspath, path
-
+import os
+from pathlib import Path
+        
 from PySide6.QtWidgets import QApplication, QFileDialog, QTableView, QHeaderView, QLineEdit, QAbstractItemView
 from PySide6.QtCore import Qt, QFile, QDir, QRegularExpression, QSortFilterProxyModel
 from PySide6.QtGui import QStandardItemModel, QStandardItem
@@ -54,8 +56,13 @@ class SListMixin:
             options=QFileDialog.Option.DontUseNativeDialog
         )
 
-        self._read_slist_from_file( slist )
+        # set the path , i.e. to handle relative sample lists
 
+        folder_path = str(Path(slist).parent) + os.sep
+
+        self.proj.var( 'path' , folder_path )
+        
+        self._read_slist_from_file( slist )
 
 
     # ------------------------------------------------------------

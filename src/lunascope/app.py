@@ -3,6 +3,8 @@
 import sys
 import argparse
 from pathlib import Path
+from os import fspath, path
+import os
 
 import lunapi as lp
 import pyqtgraph as pg
@@ -49,8 +51,9 @@ def main(argv=None) -> int:
     controller = Controller(ui, proj)
 
     if args.slist_file:
+        folder_path = str(Path( args.slist_file ).parent) + os.sep
+        proj.var( 'path' , folder_path )
         controller._read_slist_from_file( args.slist_file )
-
     try:
         return app.exec()
     except Exception:

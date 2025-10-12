@@ -40,7 +40,6 @@ class MetricsMixin:
 
         view.setSelectionBehavior(QAbstractItemView.SelectRows)
         view.setSelectionMode(QAbstractItemView.SingleSelection)
-
         
         # wiring
         self.ui.butt_sig.clicked.connect( self._toggle_sigs )
@@ -69,53 +68,42 @@ class MetricsMixin:
 
     def _update_metrics(self):
 
-
         # ------------------------------------------------------------
         #
-        # EDF header metrics
+        # EDF header metrics --> status bar
         #
         # ------------------------------------------------------------
 
+        
         self.p.silent_proc( 'HEADERS' )
+
         df = self.p.table( 'HEADERS' )
-        self.ui.lbl_id.setText( "ID: " + self.p.id() )
 
-        self.sb_id.setText( f"ID: {self.p.id()}" )
+        edf_id = self.p.id()
 
-        v1 = df.iloc[0, df.columns.get_loc('EDF_ID')]
-        self.ui.lbl_edfid.setText( f"EDF ID: {v1}" )
+        rec_dur_hms = df.iloc[0, df.columns.get_loc('REC_DUR_HMS')]
+
+        tot_dur_hms = df.iloc[0, df.columns.get_loc('TOT_DUR_HMS')]
+
+        edf_type = df.iloc[0, df.columns.get_loc('EDF_TYPE')]
         
-        v1 = df.iloc[0, df.columns.get_loc('NR')]
-        v2 = df.iloc[0, df.columns.get_loc('REC_DUR')]
-        self.ui.lbl_recs.setText( f"Records: {v1} x {v2}s" )
+        edf_na = self.p.annots().size
 
-        v1 = df.iloc[0, df.columns.get_loc('REC_DUR_HMS')]
-        self.ui.lbl_durhms.setText( f"Duration (hms): {v1}" )
+        edf_ns = df.iloc[0, df.columns.get_loc('NS')]
 
-        v1 = df.iloc[0, df.columns.get_loc('EDF_TYPE')]
-        self.ui.lbl_edftype.setText( "EDF type: " + v1 )
+        edf_starttime = df.iloc[0, df.columns.get_loc('START_TIME')]
 
-        v1 = df.iloc[0, df.columns.get_loc('REC_DUR_SEC')]
-        self.ui.lbl_dur.setText( f"Duration (s): {float(v1):.1f}")
+        edf_startdate = df.iloc[0, df.columns.get_loc('START_DATE')]
+
+        # update status bar widgets
         
-        v1a = self.p.annots().size
-        v1s = df.iloc[0, df.columns.get_loc('NS')]
-        self.ui.lbl_nsigs.setText( f"# sigs, annots: {v1s}, {v1a}" )
-        self.sb_ns.setText( f"{v1s} signals, {v1a} annotations" )
-        
-        v1 = df.iloc[0, df.columns.get_loc('START_TIME')]
-        v2 = df.iloc[0, df.columns.get_loc('START_DATE')]
-        self.ui.lbl_start.setText( f"Start: {v1} ({v2})" )
+        self.sb_id.setText( f"{edf_type}: {edf_id}" )
 
-        v1 = df.iloc[0, df.columns.get_loc('STOP_TIME')]
-        self.ui.lbl_stop.setText( f"Stop: {v1}" )
+        self.sb_start.setText( f"Start time: {edf_starttime} date: {edf_startdate}" )
 
-        v1 = df.iloc[0, df.columns.get_loc('TOT_DUR_SEC')]
-        self.ui.lbl_totdursecs.setText( f"Total duration (s): {v1}" )
+        self.sb_dur.setText( f"Duration: {rec_dur_hms} / {tot_dur_hms}" )
 
-        v1 = df.iloc[0, df.columns.get_loc('TOT_DUR_HMS')]
-        self.sb_dur.setText( f"Duration: {v1}" )
-        
+        self.sb_ns.setText( f"{edf_ns} signals, {edf_na} annotations" )
 
         
         # ------------------------------------------------------------
@@ -135,6 +123,11 @@ class MetricsMixin:
 
         view.setSortingEnabled(False)
 
+        # fill to right edge...
+        h = view.horizontalHeader()
+        h.setStretchLastSection(True)
+        h.setSectionResizeMode(QHeaderView.Interactive)
+        
         add_check_column(
             view,
             channel_col_before_insert=0,
@@ -171,7 +164,7 @@ class MetricsMixin:
         model = self.df_to_model( df )
 
         self.ui.tbl_desc_annots.setModel( model )
-
+        
         view = self.ui.tbl_desc_annots
 
         view.verticalHeader().setVisible(False)
@@ -186,6 +179,10 @@ class MetricsMixin:
             on_change= lambda anns: ( self._update_instances(anns), self._clear_pg1(), self._update_scaling(), self._update_pg1() )
         )
         
+        # fill to right edge...
+        h = view.horizontalHeader()
+        h.setStretchLastSection(True)
+        h.setSectionResizeMode(QHeaderView.Interactive)
         
     # --------------------------------------------------------------------------------
     #
@@ -216,6 +213,10 @@ class MetricsMixin:
         view = self.ui.tbl_desc_events
         view.setModel(self.events_table_proxy)
 
+        h = view.horizontalHeader()
+        h.setStretchLastSection(True)
+        h.setSectionResizeMode(QHeaderView.Interactive)
+        
         self.events_table_proxy.setFilterKeyColumn(-1)
         self.events_table_proxy.setFilterCaseSensitivity(Qt.CaseInsensitive)
         self.ui.txt_events.textChanged.connect(self.events_table_proxy.setFilterFixedString)

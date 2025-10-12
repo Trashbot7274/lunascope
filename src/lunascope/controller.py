@@ -2,10 +2,12 @@
 import os, sys, threading
 import lunapi as lp
 
-from PySide6.QtWidgets import QMainWindow
+from PySide6.QtWidgets import QApplication, QMainWindow, QStatusBar, QProgressBar
 from PySide6.QtCore import QModelIndex, QObject, Signal, Qt, QSortFilterProxyModel
 from PySide6.QtGui import QAction, QKeySequence, QShortcut, QStandardItemModel
 from PySide6.QtWidgets import QDockWidget, QLabel, QFrame, QSizePolicy, QTableView
+from PySide6.QtCore import Qt, QTimer
+
 
 from .components.slist import SListMixin
 from .components.metrics import MetricsMixin
@@ -92,7 +94,7 @@ class Controller( QMainWindow,
 
         # menu items
         self.ui.menuView.addAction(self.ui.dock_slist.toggleViewAction())
-        self.ui.menuView.addAction(self.ui.dock_header.toggleViewAction())
+        self.ui.menuView.addAction(self.ui.dock_settings.toggleViewAction())
         self.ui.menuView.addSeparator()
         self.ui.menuView.addAction(self.ui.dock_sig.toggleViewAction())
         self.ui.menuView.addAction(self.ui.dock_sigprop.toggleViewAction())
@@ -106,14 +108,12 @@ class Controller( QMainWindow,
         self.ui.menuView.addAction(self.ui.dock_outputs.toggleViewAction())
         self.ui.menuView.addSeparator()
         self.ui.menuView.addAction(self.ui.dock_help.toggleViewAction())
-        self.ui.menuView.addAction(self.ui.dock_settings.toggleViewAction())
 
+        # short cuts
         add_dock_shortcuts( self.ui, self.ui.menuView )
 
         # arrange docks
-
         self.ui.dock_help.hide()
-        self.ui.dock_settings.hide()
                 
         self.ui.setCorner(Qt.TopRightCorner,    Qt.RightDockWidgetArea)
         self.ui.setCorner(Qt.BottomRightCorner, Qt.RightDockWidgetArea)
@@ -138,10 +138,12 @@ class Controller( QMainWindow,
         
         # left side
 
-        self.ui.resizeDocks([ self.ui.dock_slist , self.ui.dock_header ],
+        self.ui.resizeDocks([ self.ui.dock_slist , self.ui.dock_settings ],
                             [int(w*0.7), int(w*0.3) ], Qt.Vertical )
-        
+
+        #
         # status bar
+        #
 
         def mk_section(text):
             lab = QLabel(text)
@@ -156,29 +158,40 @@ class Controller( QMainWindow,
             return s
 
         sb = self.ui.statusbar
+
         sb.setSizeGripEnabled(True)
+
+        # ID | EDF-type start time/date | hms(act) / hms(tot) | # sigs / # annots | progress bar
         
-        self.sb_status = mk_section( "Ready" )
-        self.sb_id     = mk_section( "<no EDF attached>" )
-        self.sb_dur    = mk_section( "               " )
-        self.sb_ns     = mk_section( "               " )
-        self.sb_render = mk_section( "" );
-        
-        sb.addPermanentWidget(self.sb_status,1)
-        sb.addPermanentWidget(vsep(),0)
-        sb.addPermanentWidget(self.sb_render,1)
-        sb.addPermanentWidget(vsep(),0)
+        self.sb_id     = mk_section( "" ); 
+        self.sb_start  = mk_section( "" ); 
+        self.sb_dur    = mk_section( "" );
+        self.sb_ns     = mk_section( "" );
+        self.sb_progress = QProgressBar()
+        self.sb_progress.setRange(0, 100)
+        self.sb_progress.setValue(0)
+
         sb.addPermanentWidget(self.sb_id ,1)
+        sb.addPermanentWidget(vsep(),0)
+        sb.addPermanentWidget(self.sb_start,1)
         sb.addPermanentWidget(vsep(),0)
         sb.addPermanentWidget(self.sb_dur,1)
         sb.addPermanentWidget(vsep(),0)
         sb.addPermanentWidget(self.sb_ns,1)
         sb.addPermanentWidget(vsep(),0)
+        sb.addPermanentWidget(self.sb_progress,1)
+        sb.addPermanentWidget(vsep(),0)
 
-        self.sb_render.setText( "Rendered: F" );
-    
+        
+        #
+        # size overall app window
+        #
+        
+        
         self.ui.resize(1200, 800)
 
+
+        
         
     # ------------------------------------------------------------
     #
@@ -188,6 +201,10 @@ class Controller( QMainWindow,
 
     def _attach_inst(self, current: QModelIndex, _):
 
+        # get ID from (possibly filtered) table
+        if not current.isValid():
+            return
+        
         # clear existing stuff
         self._clear_all()
 
@@ -198,8 +215,9 @@ class Controller( QMainWindow,
         for p in param:
             self.proj.var( p[0] , p[1] )
 
-        # attach the individual
-        self.p = self.proj.inst( current.row() + 1 )
+        # attach the individual by ID (i.e. as list may be filtered)
+        id_str = current.siblingAtColumn(0).data(Qt.DisplayRole)
+        self.p = self.proj.inst( id_str )
                 
         # and update some things
         self._update_metrics()
@@ -374,7 +392,7 @@ def add_dock_shortcuts(win, view_menu):
     for act in win.menuView.actions():
         if act.text() == "(1) Project sample list":
             act.setShortcut("Ctrl+1")
-        elif act.text() == "(2) EDF header":
+        elif act.text() == "(2) Parameters":
             act.setShortcut("Ctrl+2")
         elif act.text() == "(3) Signals":
             act.setShortcut("Ctrl+3")
@@ -390,14 +408,10 @@ def add_dock_shortcuts(win, view_menu):
             act.setShortcut("Ctrl+8")
         elif act.text() == "(9) Outputs":
             act.setShortcut("Ctrl+9")
-        elif act.text() == "(/) Signal properties":
+        elif act.text() == "(/) Signal properties": 
             act.setShortcut("Ctrl+/")
         elif act.text() == "(-) Commands":
             act.setShortcut("Ctrl+-")
-#            act.setShortcut(QKeySequence(Qt.CTRL | Qt.Key_Question))
-        elif act.text() == "(=) Parameters":
-            act.setShortcut("Ctrl+=")
-            #act.setShortcut(QKeySequence(Qt.CTRL | Qt.Key_Exclam))
 
     return act_show_all
 

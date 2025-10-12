@@ -314,12 +314,12 @@ class SignalsMixin:
         # for a given EDF instance, take selected channels 
         if len( self.ss_chs ) + len( self.ss_anns ) == 0:
             self.rendered = False
-            self.sb_render.setText( "Rendered: F" );
+#            self.sb_render.setText( "Rendered: F" );
             return
 
         # we're now going to have something to plot
         self.rendered = True
-        self.sb_render.setText( "Rendered: Y" );
+#        self.sb_render.setText( "Rendered: Y" );
 
         # pre-calculate any summary stats? [ignore for now]
         #ss.calc_bands( bsigs )
@@ -489,7 +489,10 @@ class SignalsMixin:
         # initiate gaps
         #
 
-        self.annot_mgr.update_track( "__#gaps__"  , [] , [], [], [] , color = (0,25,25) , pen = pg.mkPen((200, 200, 200), width=1) )
+        self.annot_mgr.update_track( "__#gaps__"  ,
+                                     [] , [], [], [] ,
+                                     color = (0,25,25) ,
+                                     pen = pg.mkPen((200, 200, 200), width=1) )
         
         #
         # initiate ticks

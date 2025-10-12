@@ -3,6 +3,7 @@ import pandas as pd
 
 from typing import List, Tuple
 from PySide6.QtWidgets import QPlainTextEdit, QFileDialog, QMessageBox
+import re
 
 import sys, traceback
 from PySide6.QtCore import QObject, Signal
@@ -18,11 +19,16 @@ class AnalMixin:
     # ------------------------------------------------------------
 
     def _init_anal(self):
+
         self.ui.butt_anal_exec.clicked.connect( self._exec_luna )
+
         self.ui.butt_anal_load.clicked.connect( self._load_luna )
+
         self.ui.butt_anal_save.clicked.connect( self._save_luna )
-        
-        # tree destrat view
+
+        #
+        # tree 'destrat' view
+        #
 
         m = QStandardItemModel(self)
         m.setHorizontalHeaderLabels(["Command", "Strata"])
@@ -31,16 +37,16 @@ class AnalMixin:
         tv.setModel(m)
         tv.setUniformRowHeights(True)
         tv.header().setStretchLastSection(True)
-        # optional:
-        # tv.setEditTriggers(tv.NoEditTriggers)
 
         # store info on selecting rows of destrat
         self._tree_sel = None
         self.ui.anal_tables.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.ui.anal_tables.setSelectionMode(QAbstractItemView.SingleSelection)
 
-
-    # wire filter for slists                                                                                                                                                                                                               
+    #
+    # wire filter for slists
+    #
+    
     def _on_flt_table_text(self, t: str):
         rx = QRegularExpression(QRegularExpression.escape(t))
         rx.setPatternOptions(QRegularExpression.CaseInsensitiveOption)
@@ -58,7 +64,6 @@ class AnalMixin:
         
         # get input
         inp = self.ui.txt_inp.toPlainText()
-        print(inp)
 
         # save currents channels/annots selections
         curr_chs = self.ui.tbl_desc_signals.checked()                   
@@ -71,13 +76,14 @@ class AnalMixin:
         for p in param:
             self.proj.var( p[0] , p[1] )
             
-        # execute the command
+        # execute the command in a separate thread
         try:
             self.p.eval( inp )
         except Exception as e:
             # print("CAUGHT in slot:", repr(e), type(e))
             print("Bad input:", e)
         
+
         # get the output
         tbls = self.p.strata()
 
@@ -86,7 +92,7 @@ class AnalMixin:
         annots = [x for x in self.p.edf.annots() if x != "SleepStage" ]
         self.ssa.populate( chs = [ ] , anns = annots )
 
-        # some commands dont return output
+        # some commands don't return output
         if tbls is not None:
         
             # update strata list and rewire to show
@@ -151,6 +157,12 @@ class AnalMixin:
             with open(filename, "w", encoding="utf-8") as f:
                 f.write(new_file)
 
+
+
+    # ------------------------------------------------------------
+    # handle output table
+    # ------------------------------------------------------------
+                
     def _update_table(self, cmd , stratum ):
         
         tbl = self.results[ "_".join( [ cmd , stratum ] ) ]
@@ -181,6 +193,7 @@ class AnalMixin:
         rx.setPatternOptions(QRegularExpression.CaseInsensitiveOption)
         self.anal_table_proxy.setFilterRegularExpression(rx)
         
+
     # ------------------------------------------------------------
     # tree helpers
     # ------------------------------------------------------------
@@ -244,21 +257,47 @@ class AnalMixin:
 
 
 
-    #
+    # ------------------------------------------------------------
     # helper - parse parameter file
-    #
-
+    # ------------------------------------------------------------
     
+    def _tokenize_pair_line(self,line: str) -> list[str]:
+        # split on space/tab/'=' outside quotes; support "..." and '...' with backslash escapes
+        tokens, buf, q, esc = [], [], None, False
+        for ch in line:
+            if esc:
+                buf.append(ch); esc = False; continue
+            if q:
+                if ch == '\\': esc = True; continue
+                if ch == q: q = None; continue
+                buf.append(ch); continue
+            if ch in ('"', "'"): q = ch; continue
+            if ch in ' \t=':
+                if buf: tokens.append(''.join(buf)); buf = []
+                continue
+            buf.append(ch)
+        if buf: tokens.append(''.join(buf))
+        return tokens
+
     def _parse_tab_pairs(self, edit: QPlainTextEdit) -> List[Tuple[str, str]]:
         pairs: List[Tuple[str, str]] = []
         for raw in edit.toPlainText().splitlines():
             line = raw.strip()
             if not line or line.startswith('%'):
                 continue
-            cols = line.split('\t')
-            if len(cols) != 2:
+            toks = self._tokenize_pair_line(line)
+            if len(toks) != 2:
                 continue
-            a, b = cols[0].strip(), cols[1].strip()
+            a, b = toks[0].strip(), toks[1].strip()
+            if a == '' and b == '':
+                continue
             pairs.append((a, b))
         return pairs
-        
+
+
+    
+    # ------------------------------------------------------------
+    # worker thread for executing luna commands
+    # ------------------------------------------------------------
+
+    
