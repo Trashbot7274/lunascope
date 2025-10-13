@@ -2,7 +2,8 @@
 
 from PySide6.QtWidgets import QApplication, QVBoxLayout, QTableView, QMessageBox
 from PySide6.QtCore import Qt
-import os
+import os, sys
+
 from .mplcanvas import MplCanvas
 from .plts import hypno_density
 import pandas as pd
@@ -93,14 +94,13 @@ class SoapPopsMixin:
     # ------------------------------------------------------------
 
     def _calc_pops(self):
-
+      
         if not hasattr(self, "p"): return
         
         # paraters
         pops_chs = self.ui.combo_pops.currentText()
         if type( pops_chs ) is str: pops_chs = [ pops_chs ] 
         pops_chs = ",".join( pops_chs )
-        print( pops_chs ) 
 
         pops_path = self.ui.txt_pops_path.text()
         pops_model = self.ui.txt_pops_model.text()
@@ -127,6 +127,10 @@ class SoapPopsMixin:
                 "Could not open POPS files; double check file path"
             )
             return None
+
+        print("handler:", "_calc_pops",
+              "isatty:", sys.stderr.isatty())
+        os.write(2, b"PY-STDERR-PROBE\n")
 
 
         try:

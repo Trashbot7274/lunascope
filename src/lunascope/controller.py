@@ -8,6 +8,7 @@ from PySide6.QtGui import QAction, QKeySequence, QShortcut, QStandardItemModel
 from PySide6.QtWidgets import QDockWidget, QLabel, QFrame, QSizePolicy, QTableView
 from PySide6.QtCore import Qt, QTimer
 
+from concurrent.futures import ThreadPoolExecutor
 
 from .components.slist import SListMixin
 from .components.metrics import MetricsMixin
@@ -66,18 +67,25 @@ def redirect_fds_to_widget(widget, fds=(1, 2), label=True):
 
 
 
-
 class Controller( QMainWindow,
                   SListMixin , MetricsMixin ,
                   HypnoMixin , SoapPopsMixin, 
                   AnalMixin , SignalsMixin, ManipsMixin,
                   SettingsMixin, CTreeMixin , SpecMixin ):
 
+    render_requested = Signal(object)
+    
     def __init__(self, ui, proj):
         super().__init__()
 
         self.ui = ui
         self.proj = proj
+
+        self._exec = ThreadPoolExecutor(max_workers=1)
+               
+        # track when Luna job being performed
+        self._busy = False
+        
         self._init_slist()
         self._init_metrics()
         self._init_hypno()
@@ -191,12 +199,9 @@ class Controller( QMainWindow,
         self.ui.resize(1200, 800)
 
 
-        
-        
+    
     # ------------------------------------------------------------
-    #
     # attach a new record
-    #
     # ------------------------------------------------------------
 
     def _attach_inst(self, current: QModelIndex, _):
@@ -415,4 +420,4 @@ def add_dock_shortcuts(win, view_menu):
 
     return act_show_all
 
-    
+

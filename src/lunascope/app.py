@@ -41,15 +41,13 @@ def _parse_args(argv):
 
 def main(argv=None) -> int:
     args = _parse_args(argv or sys.argv[1:])
-
-    proj = lp.proj()  # required
-
-    app = QApplication(sys.argv)  # Qt wants real sys.argv
+    app = QApplication(sys.argv)
+    
+    proj = lp.proj()   
     ui = _load_ui()
-    ui.show()
-
     controller = Controller(ui, proj)
-
+    ui.show()
+   
     if args.slist_file:
         folder_path = str(Path( args.slist_file ).parent) + os.sep
         proj.var( 'path' , folder_path )

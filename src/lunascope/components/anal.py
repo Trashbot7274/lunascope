@@ -3,7 +3,11 @@ import pandas as pd
 
 from typing import List, Tuple
 from PySide6.QtWidgets import QPlainTextEdit, QFileDialog, QMessageBox
-import re
+from PySide6.QtCore import QObject, QThread, Signal, Slot
+# import re
+
+from concurrent.futures import ThreadPoolExecutor
+from PySide6.QtCore import QMetaObject, Qt, Slot
 
 import sys, traceback
 from PySide6.QtCore import QObject, Signal
@@ -11,6 +15,7 @@ from PySide6.QtGui import QTextCursor
 from PySide6.QtGui import QStandardItemModel, QStandardItem
 from PySide6.QtCore import Qt, QItemSelection, QSortFilterProxyModel, QRegularExpression
 from PySide6.QtWidgets import QAbstractItemView, QHeaderView
+
 
 class AnalMixin:
 
@@ -59,15 +64,29 @@ class AnalMixin:
 
     def _exec_luna(self):
 
+        import os, sys        
+        print("handler:", "_calc_pops" or "_exec_luna",
+              "pid:", os.getpid(), "isatty:", sys.stderr.isatty())
+        
         # nothing attached
         if not hasattr(self, "p"): return
+
+        # if already running.
+        if self._busy:
+            return  # or show a status message
+
+        # note that we're busy
+        self._busy = True
+
+        # and do not let other jobs be run
+        self.ui.butt_anal_exec.setEnabled(False)
         
         # get input
-        inp = self.ui.txt_inp.toPlainText()
+        cmd = self.ui.txt_inp.toPlainText()
 
         # save currents channels/annots selections
-        curr_chs = self.ui.tbl_desc_signals.checked()                   
-        curr_anns = self.ui.tbl_desc_annots.checked()
+        self.curr_chs = self.ui.tbl_desc_signals.checked()                   
+        self.curr_anns = self.ui.tbl_desc_annots.checked()
 
         # get/set parameters
         self.proj.clear_vars()
@@ -75,18 +94,40 @@ class AnalMixin:
         param = self._parse_tab_pairs( self.ui.txt_param )
         for p in param:
             self.proj.var( p[0] , p[1] )
-            
-        # execute the command in a separate thread
-        try:
-            self.p.eval( inp )
-        except Exception as e:
-            # print("CAUGHT in slot:", repr(e), type(e))
-            print("Bad input:", e)
+
+
+        # test
+        import os, sys
+        print("handler:", "_exec_luna",
+              "isatty:", sys.stderr.isatty())
+        os.write(2, b"PY-STDERR-PROBE\n")
+
+        # ------------------------------------------------------------
+        # execute command string 'cmd' in a separate thread
+
+        fut = self._exec.submit(self.p.eval_lunascope, cmd)  # returns str
+
+        def done(_f=fut):
+            self._last_result = _f.result()
+            QMetaObject.invokeMethod(self, "_eval_done_impl", Qt.QueuedConnection)
+
+        fut.add_done_callback(done)
+
+
+    @Slot()
+    def _eval_done_impl(self):
+        s = self._last_result
+        print(s)
+        self._busy = False
+        self.ui.butt_anal_exec.setEnabled(True)
+        tbls = self.p.strata()           # quick Python bridge on GUI thread
+        self._render_tables(tbls)        # safe GUI work
+
+
+    def _render_tables(self,tbls):
+
+        print( 'in _render_tables' )
         
-
-        # get the output
-        tbls = self.p.strata()
-
         # did we add any annotations? if so, updating ssa needed 
         # (as this is where events table pulls from)
         annots = [x for x in self.p.edf.annots() if x != "SleepStage" ]
@@ -112,11 +153,12 @@ class AnalMixin:
         self._update_soap_list()
 
         # reset any prior selections
-        self.ui.tbl_desc_signals.set( curr_chs )
-        self.ui.tbl_desc_annots.set( curr_anns )
-        self._update_instances( curr_anns )
+        self.ui.tbl_desc_signals.set( self.curr_chs )
+        self.ui.tbl_desc_annots.set( self.curr_anns )
+        self._update_instances( self.curr_anns )
 
-
+        print( 'done _render_tables() ' )
+        
         
     def _load_luna(self):
         txt_file, _ = QFileDialog.getOpenFileName(
@@ -296,8 +338,4 @@ class AnalMixin:
 
 
     
-    # ------------------------------------------------------------
-    # worker thread for executing luna commands
-    # ------------------------------------------------------------
-
-    
+            
