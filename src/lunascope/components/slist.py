@@ -20,15 +20,14 @@ class SListMixin:
         self._proxy.setFilterKeyColumn(-1)  # all columns
         self.ui.tbl_slist.setModel(self._proxy)
 
-        # wire load slist dialog
+        # wire buttons
         self.ui.butt_load_slist.clicked.connect(self.open_file)
-
-        # wire build slist dialog
         self.ui.butt_build_slist.clicked.connect(self.open_folder)
-
-        # wire EDF load dialog
         self.ui.butt_load_edf.clicked.connect(self.open_edf)
-
+        self.ui.butt_load_annot.clicked.connect(self.open_annot)
+#        self.ui.butt_refresh.clicked.connect(self.refresh)
+        
+        # filter SL
         self.ui.flt_slist.textChanged.connect( self._on_filter_text)
 
         # wire select ID from slist --> load
@@ -176,10 +175,68 @@ class SListMixin:
             # update label to show slist file
             self.ui.lbl_slist.setText( '<internal>' )
 
+            # and prgrammatically select this first row
+            model = self.ui.tbl_slist.model()
+            if model and model.rowCount() > 0:
+                self.ui.tbl_slist.selectRow(0)
+                idx = model.index(0, 0)
+                self._attach_inst(idx, None)
             
+
+
+    # ------------------------------------------------------------
+    # Load .annot from a file
+    # ------------------------------------------------------------
         
+    def open_annot(self):
 
+        annot_file , _ = QFileDialog.getOpenFileName(
+            self.ui,
+            "Open annotation file",
+            "",
+            "EDF (*.annot *.eannot *.xml *.tsv *.txt);;All Files (*)",
+            options=QFileDialog.Option.DontUseNativeDialog
+        )
 
+        # update
+        if annot_file != "":
+
+            base = path.splitext(path.basename(annot_file))[0]
+
+            row = [ base ,".", annot_file ] 
+            
+            # specify SL directly
+            self.proj.clear()
+            self.proj.eng.set_sample_list( [ row ] )
+
+            # get the SL
+            df = self.proj.sample_list()
+
+            # assgin to model
+            model = self.df_to_model( df )              
+            self._proxy.setSourceModel(model)
+
+            # display options resize
+            view = self.ui.tbl_slist
+#            view.setSortingEnabled(True)
+            h = view.horizontalHeader()
+            h.setSectionResizeMode(QHeaderView.Interactive)  # user-resizable
+            h.setStretchLastSection(False)                   # no auto-stretch fighting you
+            view.resizeColumnsToContents()  
+            view.setSelectionBehavior(QAbstractItemView.SelectRows)
+            view.setSelectionMode(QAbstractItemView.SingleSelection)
+            view.verticalHeader().setVisible(True)
+            # update label to show slist file
+            self.ui.lbl_slist.setText( '<internal>' )
+
+            # and prgrammatically select this first row
+            model = self.ui.tbl_slist.model()
+            if model and model.rowCount() > 0:
+                self.ui.tbl_slist.selectRow(0)
+                idx = model.index(0, 0)
+                self._attach_inst(idx, None)
+
+                
     # ------------------------------------------------------------
     # Populate sample-list table
     # ------------------------------------------------------------

@@ -1,10 +1,12 @@
 # src/lunascope/app.py
 
-import sys
 import argparse
 from pathlib import Path
 from os import fspath, path
-import os
+import os, sys
+
+# suppress macOS warnings
+os.environ["OS_ACTIVITY_MODE"] = "disable"
 
 import lunapi as lp
 import pyqtgraph as pg

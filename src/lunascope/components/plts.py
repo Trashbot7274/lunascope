@@ -8,6 +8,32 @@ from matplotlib import colormaps
 from matplotlib import pyplot as plt
 
 @staticmethod
+def hypno(ss, e=None, ax=None, *, title=None, xsize=20, ysize=2, clear=True):
+    """Plot a hypnogram into an existing Axes if provided."""
+    ssn = lp.stgn(ss)
+    if e is None:
+        e = np.arange(len(ssn), dtype=float)
+    e = e / 120.0
+
+    created = False
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(xsize, ysize))
+        created = True
+    elif clear:
+        ax.clear()
+
+    ax.plot(e, ssn, color='gray', linewidth=0.5, zorder=2)
+    ax.scatter(e, ssn, c=lp.stgcol(ss), s=10, zorder=3)
+    ax.set_ylabel('Sleep stage')
+    ax.set_xlabel('Time (hrs)')
+    ax.set_ylim(-3.5, 2.5)
+    ax.set_xlim(0, float(np.nanmax(e)))
+    ax.set_yticks([-3, -2, -1, 0, 1, 2], labels=['N3','N2','N1','R','W','?'])
+    if title:
+        ax.set_title(title)
+    return ax  # caller decides whether to draw
+
+@staticmethod
 def spec(ss, e=None, ax=None, *, title=None, xsize=20, ysize=2, clear=True):
     ssn = lp.stgn(ss)
     if e is None:

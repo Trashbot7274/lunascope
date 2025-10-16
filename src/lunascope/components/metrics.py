@@ -37,9 +37,28 @@ class MetricsMixin:
         h.setMinimumSectionSize(50)
         h.setDefaultSectionSize(150)
         view.resizeColumnsToContents()
-
         view.setSelectionBehavior(QAbstractItemView.SelectRows)
         view.setSelectionMode(QAbstractItemView.SingleSelection)
+
+        #
+        # annots table
+        #
+
+#        view = self.ui.tbl_desc_annots
+#        view.verticalHeader().setVisible(False)
+#        view.resizeColumnsToContents()
+
+        view = self.ui.tbl_desc_annots
+        view.setSortingEnabled(True)
+        h = view.horizontalHeader()
+        h.setSectionResizeMode(QHeaderView.Interactive)
+        h.setStretchLastSection(False)
+        h.setMinimumSectionSize(50)
+        h.setDefaultSectionSize(150)
+        view.resizeColumnsToContents()
+        view.setSelectionBehavior(QAbstractItemView.SelectRows)
+        view.setSelectionMode(QAbstractItemView.SingleSelection)
+    
         
         # wiring
         self.ui.butt_sig.clicked.connect( self._toggle_sigs )
@@ -112,21 +131,36 @@ class MetricsMixin:
         #
         # ------------------------------------------------------------
 
-        df = self.p.table( 'HEADERS' , 'CH' )        
-        df = df[ [ 'CH' , 'PDIM' , 'SR' ] ]
+        df = self.p.table( 'HEADERS' , 'CH' )
+        # may be empty EDF
+        if len(df.index) > 0:
+            df = df[ [ 'CH' , 'PDIM' , 'SR' ] ]
+        else:
+            df = pd.DataFrame(columns=["CH", "PDIM", "SR"])
+            
         model = self.df_to_model( df )
         self.ui.tbl_desc_signals.setModel( model )
 
+        # update view
         view = self.ui.tbl_desc_signals
-        view.verticalHeader().setVisible(False)
-        view.resizeColumnsToContents()
-
-        view.setSortingEnabled(False)
-
-        # fill to right edge...
+        view.setSortingEnabled(True)
         h = view.horizontalHeader()
-        h.setStretchLastSection(True)
         h.setSectionResizeMode(QHeaderView.Interactive)
+        h.setStretchLastSection(False)
+        h.setMinimumSectionSize(50)
+        h.setDefaultSectionSize(150)
+        view.resizeColumnsToContents()
+        view.setSelectionBehavior(QAbstractItemView.SelectRows)
+        view.setSelectionMode(QAbstractItemView.SingleSelection)
+
+#        view = self.ui.tbl_desc_signals
+#        view.verticalHeader().setVisible(False)
+#        view.resizeColumnsToContents()
+#        view.setSortingEnabled(False)
+#        h = view.horizontalHeader()
+#        h.setStretchLastSection(True)
+#        h.setSectionResizeMode(QHeaderView.Interactive)
+
         
         add_check_column(
             view,
@@ -148,10 +182,10 @@ class MetricsMixin:
 
         hdr = self.p.headers()
 
-        self.units = dict( zip( hdr.CH , hdr.PDIM ) )
-
-
-
+        if hdr is not None:
+            self.units = dict( zip( hdr.CH , hdr.PDIM ) )
+        else:
+            self.units = None
 
         # --------------------------------------------------------------------------------
         #
@@ -160,16 +194,24 @@ class MetricsMixin:
         # --------------------------------------------------------------------------------
 
         df = self.p.annots()
-
         model = self.df_to_model( df )
-
         self.ui.tbl_desc_annots.setModel( model )
         
+#        view = self.ui.tbl_desc_annots
+#        view.verticalHeader().setVisible(False)
+#        view.resizeColumnsToContents()
+
         view = self.ui.tbl_desc_annots
-
-        view.verticalHeader().setVisible(False)
-
+        view.setSortingEnabled(True)
+        h = view.horizontalHeader()
+        h.setSectionResizeMode(QHeaderView.Interactive)
+        h.setStretchLastSection(False)
+        h.setMinimumSectionSize(50)
+        h.setDefaultSectionSize(150)
         view.resizeColumnsToContents()
+        view.setSelectionBehavior(QAbstractItemView.SelectRows)
+        view.setSelectionMode(QAbstractItemView.SingleSelection)
+
 
         add_check_column(
             view,

@@ -8,6 +8,7 @@ from PySide6.QtCore import QObject, QThread, Signal, Slot
 
 from concurrent.futures import ThreadPoolExecutor
 from PySide6.QtCore import QMetaObject, Qt, Slot
+import traceback
 
 import sys, traceback
 from PySide6.QtCore import QObject, Signal
@@ -63,10 +64,6 @@ class AnalMixin:
     # ------------------------------------------------------------
 
     def _exec_luna(self):
-
-        import os, sys        
-        print("handler:", "_calc_pops" or "_exec_luna",
-              "pid:", os.getpid(), "isatty:", sys.stderr.isatty())
         
         # nothing attached
         if not hasattr(self, "p"): return
@@ -79,7 +76,7 @@ class AnalMixin:
         self._busy = True
 
         # and do not let other jobs be run
-        self.ui.butt_anal_exec.setEnabled(False)
+        self._buttons( False )
         
         # get input
         cmd = self.ui.txt_inp.toPlainText()
@@ -87,47 +84,79 @@ class AnalMixin:
         # save currents channels/annots selections
         self.curr_chs = self.ui.tbl_desc_signals.checked()                   
         self.curr_anns = self.ui.tbl_desc_annots.checked()
-
+        
         # get/set parameters
         self.proj.clear_vars()
         self.proj.reinit()
+        self.proj.silence( False )
         param = self._parse_tab_pairs( self.ui.txt_param )
         for p in param:
             self.proj.var( p[0] , p[1] )
-
-
-        # test
-        import os, sys
-        print("handler:", "_exec_luna",
-              "isatty:", sys.stderr.isatty())
-        os.write(2, b"PY-STDERR-PROBE\n")
-
+   
+        
         # ------------------------------------------------------------
         # execute command string 'cmd' in a separate thread
 
         fut = self._exec.submit(self.p.eval_lunascope, cmd)  # returns str
-
+                
         def done(_f=fut):
-            self._last_result = _f.result()
-            QMetaObject.invokeMethod(self, "_eval_done_impl", Qt.QueuedConnection)
+            try:
+                exc = _f.exception()
+                if exc is None:
+                    self._last_result = _f.result()  # cheap; already completed
+                    QMetaObject.invokeMethod(self, "_eval_done_ok", Qt.QueuedConnection)
+                else:
+                    self._last_exc = exc
+                    self._last_tb = f"{type(cb_exc).__name__}: {cb_exc}"
+                    #self._last_tb = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+                    QMetaObject.invokeMethod(self, "_eval_done_err", Qt.QueuedConnection)
+            except Exception as cb_exc:
+                # guard against exceptions in the callback itself
+                self._last_exc = cb_exc
+                self._last_tb = f"{type(cb_exc).__name__}: {cb_exc}"
+                #self._last_tb = "".join(traceback.format_exception(type(cb_exc), cb_exc, cb_exc.__traceback__))
+                QMetaObject.invokeMethod(self, "_eval_done_err", Qt.QueuedConnection)
 
+                
         fut.add_done_callback(done)
 
-
     @Slot()
-    def _eval_done_impl(self):
-        s = self._last_result
-        print(s)
-        self._busy = False
-        self.ui.butt_anal_exec.setEnabled(True)
-        tbls = self.p.strata()           # quick Python bridge on GUI thread
-        self._render_tables(tbls)        # safe GUI work
+    def _eval_done_ok(self):
+        try:
+#            s = self._last_result
+            tbls = self.p.strata()
+            self._render_tables(tbls)
+        finally:
+            self._busy = False
+            self._buttons( True )
+            
+    @Slot()
+    def _eval_done_err(self):
+        try:
+            # show or log the error; pick one
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.critical(self, "Evaluation error", self._last_tb)
+            # or: print(self._last_tb, file=sys.stderr)
+        finally:
+            self._busy = False
+            self._buttons( True )
 
+    def _buttons( self, status ):
+        self.ui.butt_anal_exec.setEnabled(status)
+        self.ui.butt_spectrogram.setEnabled(status)
+        self.ui.butt_hjorth.setEnabled(status)
+        self.ui.butt_calc_hypnostats.setEnabled(status)
+        self.ui.butt_soap.setEnabled(status)
+        self.ui.butt_pops.setEnabled(status)
+        self.ui.butt_render.setEnabled(status)
+        self.ui.butt_refresh.setEnabled(status)
+        self.ui.butt_load_slist.setEnabled(status)
+        self.ui.butt_build_slist.setEnabled(status)
+        self.ui.butt_load_edf.setEnabled(status)
 
+            
     def _render_tables(self,tbls):
 
-        print( 'in _render_tables' )
-        
         # did we add any annotations? if so, updating ssa needed 
         # (as this is where events table pulls from)
         annots = [x for x in self.p.edf.annots() if x != "SleepStage" ]
@@ -157,7 +186,6 @@ class AnalMixin:
         self.ui.tbl_desc_annots.set( self.curr_anns )
         self._update_instances( self.curr_anns )
 
-        print( 'done _render_tables() ' )
         
         
     def _load_luna(self):

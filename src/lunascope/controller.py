@@ -73,8 +73,6 @@ class Controller( QMainWindow,
                   AnalMixin , SignalsMixin, ManipsMixin,
                   SettingsMixin, CTreeMixin , SpecMixin ):
 
-    render_requested = Signal(object)
-    
     def __init__(self, ui, proj):
         super().__init__()
 
@@ -134,6 +132,13 @@ class Controller( QMainWindow,
         self.ui.dock_console.hide()
         self.ui.dock_outputs.hide()
 
+        
+        # left side
+
+        self.ui.resizeDocks([ self.ui.dock_slist , self.ui.dock_settings ],
+                            [int(w*0.7), int(w*0.3) ], Qt.Vertical )
+
+        
         # right
         h = self.ui.height()
 
@@ -143,11 +148,11 @@ class Controller( QMainWindow,
                             [int(h*0.5), int(h*0.4), int(h*0.1) ],
                             Qt.Vertical)
 
-        
-        # left side
+        w_right = 320
+        self.ui.resizeDocks([self.ui.dock_slist, self.ui.dock_sig], [self.width()-w_right, w_right], Qt.Horizontal)
 
-        self.ui.resizeDocks([ self.ui.dock_slist , self.ui.dock_settings ],
-                            [int(w*0.7), int(w*0.3) ], Qt.Vertical )
+        self.ui.centralWidget().setMinimumWidth(0)
+        self.ui.centralWidget().setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         #
         # status bar
@@ -233,11 +238,15 @@ class Controller( QMainWindow,
         # initially, no signals rendered
         self.rendered = False
 
+        # track all original annots
+        self.ssa_anns = self.p.edf.annots()
+        self.ssa_anns_lookup = {v: i for i, v in enumerate(self.ssa_anns)}
+        
         # but initialize a separate ss for annotations only
         self.ssa = lp.segsrv( self.p )
-        self.ssa.populate( chs = [ ] , anns = self.p.edf.annots() )
+        self.ssa.populate( chs = [ ] , anns = self.ssa_anns )
         self.ssa.set_annot_format6( False )  # pyqtgraph vs plotly
-
+        
         # populate here, as used by plot_simple (prior to render)
         self.ss_anns = self.ui.tbl_desc_annots.checked()
         self.ss_chs = self.ui.tbl_desc_signals.checked()
@@ -265,8 +274,14 @@ class Controller( QMainWindow,
 
         clear_rows( self.ui.tbl_desc_signals )
 
+        clear_rows( self.ui.tbl_desc_annots )
+
         clear_rows( self.ui.anal_tables ) 
 
+        clear_rows( self.ui.tbl_soap1 )
+
+        clear_rows( self.ui.tbl_pops1 )
+        
         self.ui.combo_spectrogram.clear()
         self.ui.combo_pops.clear()
         self.ui.combo_soap.clear()
@@ -280,11 +295,15 @@ class Controller( QMainWindow,
         self.hypnocanvas.ax.cla()
         self.hypnocanvas.figure.canvas.draw_idle()
 
-        # proxies used for slist, anal and instance tables
-        #  self.events_table_proxy
-        #  self.anal_table_proxy
-        #  self.proxy  (slist)
+        self.soapcanvas.ax.cla()
+        self.soapcanvas.figure.canvas.draw_idle()
 
+        self.popscanvas.ax.cla()
+        self.popscanvas.figure.canvas.draw_idle()
+            
+        self.popshypnocanvas.ax.cla()
+        self.popshypnocanvas.figure.canvas.draw_idle()
+        
 
 # ------------------------------------------------------------
 #

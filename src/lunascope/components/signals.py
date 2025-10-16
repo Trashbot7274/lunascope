@@ -106,7 +106,7 @@ class SignalsMixin:
         # number of scope-epochs (i.e. fixed at 0, 30s), and seconds
         self.ne = int( nsecs_clk / scope_epoch_sec )
         self.ns = nsecs_clk
-
+                
         # option defaults
         self.show_labels = True
         
@@ -223,10 +223,15 @@ class SignalsMixin:
 
         # get staging (in units no larger than 30 seconds)
         # use STAGES here so that we only get the unmasked datapoints
-        self.p.silent_proc( 'EPOCH align verbose & STAGE' )
-        df1 = self.p.table( 'EPOCH' , 'E' )
-        df1 = df1[ ['E' , 'START' , 'STOP' ] ] 
+        res = self.p.silent_proc( 'EPOCH align verbose & STAGE' )
 
+        if "EPOCH: E" in res:
+            df1 = self.p.table( 'EPOCH' , 'E' )
+            df1 = df1[ ['E' , 'START' , 'STOP' ] ] 
+        else:
+            df1 = None
+            df1 = pd.DataFrame( columns = [ "E", "OSTAGE" ] )
+      
         # if no valid staging, will not have any 'STAGE' output
         tbls = self.p.strata()
         has_staging = (tbls["Command"] == "STAGE").any()
@@ -380,7 +385,7 @@ class SignalsMixin:
         
         # update ss window
         t1 = ""
-        t1 = ""        
+        t2 = ""        
         if self.rendered is True:
             self.ss.window( lo  , hi )
             t1 = self.ss.get_window_left_hms()
@@ -425,7 +430,7 @@ class SignalsMixin:
         tstops = [ tscale[idx] for idx in range(1,len(tscale),2)]
         times = np.concatenate((tstarts, tstops), axis=1)
 
-        # initiate curves etc [ can prob.. put most of this in a single function to avoid dupl.) 
+        # initiate curves etc 
 
         self._initiate_curves()
 
@@ -596,14 +601,29 @@ class SignalsMixin:
             yannot = 1 - self.pg1_footer_height - self.pg1_header_height 
 
 #        print('ns',ns,'na',na,'yannot', yannot )
-        
-        self.ss.set_scaling( ns, na,  yscale , yspacing ,
-                             self.pg1_header_height,
-                             self.pg1_footer_height ,
-                             yannot ,
-                             self.clip_signals )
-        
+
+        # update scaling (either for ss or ssa in simple rendering)
+
+        if self.rendered is True:
+            self.ss.set_scaling( ns, na,  yscale , yspacing ,
+                                 self.pg1_header_height,
+                                 self.pg1_footer_height ,
+                                 yannot ,
+                                 self.clip_signals )
+        else:
+            self.ssa.set_scaling( ns, na,  yscale , yspacing ,
+                                  self.pg1_header_height,
+                                  self.pg1_footer_height ,
+                                  yannot ,
+                                  self.clip_signals )
+
+
+
+        # update main plot (passes to _update_pg1_simple() as needed)
+            
         self._update_pg1()
+
+
 
         
     # --------------------------------------------------------------------------------
@@ -678,6 +698,7 @@ class SignalsMixin:
         # annots
         aidx = 0
         self.ss.compile_windowed_annots( anns )
+
         for ann in anns:
             a0 = self.ss.get_annots_xaxes( ann )            
             if len(a0) == 0:
@@ -687,7 +708,8 @@ class SignalsMixin:
             a1 = self.ss.get_annots_xaxes_ends( ann )            
             y0 = self.ss.get_annots_yaxes( ann )
             y1 = self.ss.get_annots_yaxes_ends( ann )
-            self.annot_curves[aidx].setData( [ x1 , x2 ] , [ ( y0[0] + y1[0] ) / 2  , ( y0[0] + y1[0] ) / 2 ] ) 
+            self.annot_curves[aidx].setData( [ x1 , x2 ] , [ ( y0[0] + y1[0] ) / 2  , ( y0[0] + y1[0] ) / 2 ] )
+
 #            self.annot_mgr.toggle( ann , True )
             a0, a1 = _ensure_min_px_width( vb, a0, a1, px=1)  # 1-px minimum
             self.annot_mgr.update_track( ann , x0 = a0 , x1 = a1 , y0 = y0 , y1 = y1 )
@@ -769,7 +791,8 @@ class SignalsMixin:
             h = h / len(chs) 
         else:
             h = 0
-
+      
+        
         # channels
         idx = 0        
         tv = [ '' ] * ( len(chs) + len(anns) )
@@ -800,16 +823,19 @@ class SignalsMixin:
         # annots (from ssa)
         aidx = 0
         self.ssa.compile_windowed_annots( anns )
+        anns1 = [self.ssa_anns_lookup[v] for v in anns ]
+
         for ann in anns:
             a0 = self.ssa.get_annots_xaxes( ann )            
             if len(a0) == 0:
                 idx = idx + 1
                 aidx = aidx + 1
                 continue
+
             a1 = self.ssa.get_annots_xaxes_ends( ann )
             y0 = self.ssa.get_annots_yaxes( ann )
             y1 = self.ssa.get_annots_yaxes_ends( ann )
-            self.annot_curves[aidx].setData( [ x1 , x2 ] , [ ( y0[0] + y1[0] ) / 2  , ( y0[0] + y1[0] ) / 2 ] ) 
+            self.annot_curves[ anns1[aidx] ].setData( [ x1 , x2 ] , [ ( y0[0] + y1[0] ) / 2  , ( y0[0] + y1[0] ) / 2 ] ) 
 #            self.annot_mgr.toggle( ann , True )
             a0, a1 = _ensure_min_px_width( vb, a0, a1, px=1)  # 1-px minimum
             self.annot_mgr.update_track( ann , x0 = a0 , x1 = a1 , y0 = y0 , y1 = y1 )
@@ -821,6 +847,7 @@ class SignalsMixin:
             idx = idx + 1
             aidx = aidx + 1
 
+            
         # add labels
         # filter out empty/blank labels before drawing
         xv2, yv2, tv2 = [], [], []
@@ -970,15 +997,36 @@ class XRangeSelector(QtCore.QObject):
 
     # ---------- helpers ----------
     def _snap(self, x): return int(round(x)) if self.integer else float(x)
+
     def _in_vb(self, scene_pos): return self.vb.sceneBoundingRect().contains(scene_pos)
+
     def _px_to_dx(self, px):
         (xmin, xmax), w = self.vb.viewRange()[0], max(1.0, float(self.vb.width() or 1))
         return (xmax - xmin) * (float(px) / w)
+
     def _dx_to_px(self, dx):
         (xmin, xmax), w = self.vb.viewRange()[0], max(1.0, float(self.vb.width() or 1))
         span = max(1e-12, xmax - xmin)
         return abs(dx) * (w / span)
 
+    def _full_bounds(self):
+        # Prefer explicit bounds
+        if self.bounds is not None:
+            return float(self.bounds[0]), float(self.bounds[1])
+        # Else use data bounds in the ViewBox
+        br = self.vb.childrenBounds()  # QRectF over all child items (data coords)
+        if br is not None and br.width() > 0:
+            return float(br.left()), float(br.right())
+        # Fallback: current view (last resort)
+        xmin, xmax = self.vb.viewRange()[0]
+        return float(xmin), float(xmax)
+
+    def _inside_region_scene(self, scene_pos):
+        if not self.region.isVisible():
+            return False
+        p = self.region.mapFromScene(scene_pos)
+        return self.region.boundingRect().contains(p)
+    
     def _max_span(self):
         if self.bounds is not None:
             return max(0.0, float(self.bounds[1] - self.bounds[0]))
@@ -1111,7 +1159,43 @@ class XRangeSelector(QtCore.QObject):
             return False  # let LRI handle its own drags/resizes
 
         et = ev.type()
-        if et == QtCore.QEvent.GraphicsSceneMousePress and ev.button() == QtCore.Qt.LeftButton:
+
+
+        if et == QtCore.QEvent.GraphicsSceneMouseDoubleClick and ev.button() == QtCore.Qt.LeftButton:
+            if not self._in_vb(ev.scenePos()):
+                return False
+
+            # cancel any press/drag in progress
+            self._dragging_bg = False
+            self._dragging_move = False
+
+            # check if click is inside the region (in scene coords)
+            inside = False
+            if self.region.isVisible():
+                # scene-space hit test for robustness
+                r = self.region.mapRectToScene(self.region.boundingRect())
+                inside = r.contains(ev.scenePos())
+                print('set')
+            print ('inside',inside)
+            
+            if inside:
+                # shrink to one epoch centered at click
+                x = self.vb.mapSceneToView(ev.scenePos()).x()
+                half = 0.5 * self.click_span
+                lo2, hi2 = self._enforce_span_limits(*self._clamp_pair(x - half, x + half))
+            else:
+                # expand to whole recording (bounds or data extent)
+                lo2, hi2 = self._full_bounds()
+                if self.bounds is not None:
+                    lo2, hi2 = self._enforce_span_limits(lo2, hi2)
+
+            self._set_region_silent(lo2, hi2)
+            self.region.show()
+            self._schedule_emit(lo2, hi2)
+            return True
+
+                  
+        elif et == QtCore.QEvent.GraphicsSceneMousePress and ev.button() == QtCore.Qt.LeftButton:
             if not self._in_vb(ev.scenePos()):
                 return False
             x = self.vb.mapSceneToView(ev.scenePos()).x()
@@ -1139,7 +1223,7 @@ class XRangeSelector(QtCore.QObject):
             self._dragging_bg = True; self._moved = False
             self._press_scene = ev.scenePos()
             self._anchor_x = self._snap(x)
-            return True
+            return False
 
         elif et == QtCore.QEvent.GraphicsSceneMouseMove:
             if self._dragging_move:
@@ -1374,9 +1458,105 @@ class TextBatch(pg.GraphicsObject):
 
 import numpy as np
 import pyqtgraph as pg
-
+from pyqtgraph.Qt import QtCore
 
 class TrackManager:
+    def __init__(self, plot):
+        self.plot = plot
+        self.tracks = {}  # name -> dict(item, color, pen, visible)
+
+        # --- adaptive border controls (added) ---
+        self._vb = getattr(self.plot, "getViewBox", lambda: None)()
+        self._pen_thresh = 1.0  # data units per screen pixel; tune to taste
+        self._pen_on = pg.mkPen((0, 0, 0, 120), width=1, cosmetic=True)  # thin, translucent
+        self._pen_off = pg.mkPen(None)
+        self._borders_on = None  # unknown until first check
+
+        self._border_timer = QtCore.QTimer()
+        self._border_timer.setSingleShot(True)
+        self._border_timer.setInterval(50)
+        self._border_timer.timeout.connect(self._update_all_pens)
+
+        if self._vb is not None:
+            self._vb.sigRangeChanged.connect(lambda *_: self._border_timer.start())
+        # ----------------------------------------
+
+    def _want_borders(self):
+        if self._vb is None:
+            return True
+        sx, sy = self._vb.viewPixelSize()
+        return max(sx, sy) < self._pen_thresh
+
+    def _effective_pen(self, orig_pen):
+        """Return the pen to apply now given zoom level."""
+        want = self._want_borders()
+        return (self._pen_on if orig_pen is None else pg.mkPen(orig_pen)) if want else self._pen_off
+
+    def _update_all_pens(self):
+        want = self._want_borders()
+        if want == self._borders_on:
+            return
+        self._borders_on = want
+        for t in self.tracks.values():
+            # Respect original pen when borders are on; hide borders when off
+            eff = self._effective_pen(t["pen"])
+            t["item"].setOpts(pen=eff)
+
+    def update_track(self, name, x0, x1, y0, y1, color=None, pen=None):
+        """
+        Replace the given track with new rectangles spanning [x0,x1] × [y0,y1].
+        Arrays must be equal length.
+        """
+        x0 = np.asarray(x0)
+        x1 = np.asarray(x1)
+        y0 = np.asarray(y0)
+        y1 = np.asarray(y1)
+        assert x0.shape == x1.shape == y0.shape == y1.shape
+
+        if color is None and name in self.tracks:
+            color = self.tracks[name]["color"]
+        if color is None:
+            color = (200, 250, 240)
+
+        if pen is None and name in self.tracks:
+            pen = self.tracks[name]["pen"]  # store original user pen (may be tuple/QPen/None)
+        # default black edge if never set before
+        if pen is None and name not in self.tracks:
+            pen = (0, 0, 0)
+
+        # remove old
+        if name in self.tracks:
+            self.plot.removeItem(self.tracks[name]["item"])
+
+        # Create item with adaptive pen
+        eff_pen = self._effective_pen(pen)
+        item = pg.BarGraphItem(x0=x0, x1=x1, y0=y0, y1=y1, brush=color, pen=eff_pen, name=name)
+        self.plot.addItem(item)
+        self.tracks[name] = {"item": item, "color": color, "pen": pen, "visible": True}
+
+        # Initialize border state if first time
+        if self._borders_on is None:
+            self._borders_on = self._want_borders()
+
+    def toggle(self, name, on=True):
+        if name in self.tracks:
+            self.tracks[name]["visible"] = on
+            self.tracks[name]["item"].setVisible(on)
+
+    def clear(self, name=None):
+        if name is None:
+            for t in self.tracks.values():
+                self.plot.removeItem(t["item"])
+            self.tracks.clear()
+        else:
+            if name in self.tracks:
+                self.plot.removeItem(self.tracks[name]["item"])
+                self.tracks.pop(name)
+
+
+# legacy version that did not handle overlapping black borders so well
+# on low DPI screens
+class OldTrackManager:
     def __init__(self, plot):
         self.plot = plot
         self.tracks = {}  # name -> dict(item, color, visible)
