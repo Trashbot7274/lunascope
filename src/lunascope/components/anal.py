@@ -105,6 +105,10 @@ class AnalMixin:
         # ------------------------------------------------------------
         # execute command string 'cmd' in a separate thread
 
+        self.sb_progress.setVisible(True)
+        self.sb_progress.setRange(0, 0) 
+        self.sb_progress.setFormat("Running…")
+        
         fut = self._exec.submit(self.p.eval_lunascope, cmd)  # returns str
                 
         def done(_f=fut):
@@ -115,7 +119,7 @@ class AnalMixin:
                     QMetaObject.invokeMethod(self, "_eval_done_ok", Qt.QueuedConnection)
                 else:
                     self._last_exc = exc
-                    self._last_tb = f"{type(cb_exc).__name__}: {cb_exc}"
+                    self._last_tb = f"{type(exc).__name__}: {exc}"
                     #self._last_tb = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
                     QMetaObject.invokeMethod(self, "_eval_done_err", Qt.QueuedConnection)
             except Exception as cb_exc:
@@ -128,15 +132,21 @@ class AnalMixin:
                 
         fut.add_done_callback(done)
 
+
     @Slot()
-    def _eval_done_ok(self):
+    def _eval_done_ok(self):        
         try:
-#            s = self._last_result
+            # output to console
+            self.ui.txt_out.setPlainText( self._last_result )
+            # and get tables
             tbls = self.p.strata()
             self._render_tables(tbls)
         finally:
             self._busy = False
             self._buttons( True )
+            # stop progress
+            self.sb_progress.setRange(0, 100); self.sb_progress.setValue(0)
+            self.sb_progress.setVisible(False)
             
     @Slot()
     def _eval_done_err(self):
@@ -148,6 +158,8 @@ class AnalMixin:
         finally:
             self._busy = False
             self._buttons( True )
+            self.sb_progress.setRange(0, 100); self.sb_progress.setValue(0)
+            self.sb_progress.setVisible(False)
 
     def _buttons( self, status ):
         self.ui.butt_anal_exec.setEnabled(status)
@@ -221,7 +233,7 @@ class AnalMixin:
 
         new_file = self.ui.txt_inp.toPlainText()
 
-        filename, _ = QFileDialog.getSaveFileName(
+        filename, selected_filter = QFileDialog.getSaveFileName(
             self,
             "Save Luna Script To .txt",
             "",
@@ -230,7 +242,7 @@ class AnalMixin:
 
         if filename:
             # Ensure .txt extension if none was given
-            if not filename.endswith(".txt"):
+            if selected_filter.startswith("Text") and not filename.lower().endswith(".txt"):
                 filename += ".txt"
 
             with open(filename, "w", encoding="utf-8") as f:
@@ -337,24 +349,35 @@ class AnalMixin:
     # ------------------------------------------------------------
     # helper - parse parameter file
     
-    def _tokenize_pair_line(self,line: str) -> list[str]:
-        # split on space/tab/'=' outside quotes;
-        # support "..." and '...' with backslash escapes
-        tokens, buf, q, esc = [], [], None, False
+
+    def _tokenize_pair_line(self, line: str, keep_quotes: bool = True) -> list[str]:
+        out, buf, q, esc = [], [], None, False
         for ch in line:
             if esc:
                 buf.append(ch); esc = False; continue
             if q:
-                if ch == '\\': esc = True; continue
-                if ch == q: q = None; continue
-                buf.append(ch); continue
-            if ch in ('"', "'"): q = ch; continue
-            if ch in ' \t=':
-                if buf: tokens.append(''.join(buf)); buf = []
+                buf.append(ch)
+                if ch == '\\': esc = True
+                elif ch == q:  q = None
+                continue
+            if ch in ('"', "'"):
+                q = ch; buf.append(ch); continue
+            if ch in (' ', '\t', '=') and not out:
+                out.append(''.join(buf).strip())
+                buf = []  # start capturing right side fresh
                 continue
             buf.append(ch)
-        if buf: tokens.append(''.join(buf))
-        return tokens
+        if buf:
+            out.append(''.join(buf).strip())
+        # remove leading = or whitespace on right side
+        if len(out) == 2:
+            out[1] = out[1].lstrip('= \t')
+        if not keep_quotes and len(out) == 2:
+            v = out[1]
+            if len(v) >= 2 and v[0] == v[-1] and v[0] in ("'", '"'):
+                out[1] = v[1:-1]
+        return out
+
 
     def _parse_tab_pairs(self, edit: QPlainTextEdit) -> List[Tuple[str, str]]:
         pairs: List[Tuple[str, str]] = []

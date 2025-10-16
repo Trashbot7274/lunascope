@@ -42,7 +42,7 @@ class SListMixin:
         self.ui.butt_build_slist.clicked.connect(self.open_folder)
         self.ui.butt_load_edf.clicked.connect(self.open_edf)
         self.ui.butt_load_annot.clicked.connect(self.open_annot)
-#        self.ui.butt_refresh.clicked.connect(self.refresh)
+        self.ui.butt_refresh.clicked.connect(self._refresh)
         
         # filter SL
         self.ui.flt_slist.textChanged.connect( self._on_filter_text)
@@ -200,10 +200,31 @@ class SListMixin:
                 self._attach_inst(idx, None)
             
 
+    # ------------------------------------------------------------
+    # Reload same EDF, i.e. refresh
+
+    def _refresh(self):
+
+        view = self.ui.tbl_slist
+        model = view.model()
+        if not model: return
+
+        sel = view.selectionModel()
+        row = 0
+        if sel and sel.currentIndex().isValid():
+            row = sel.currentIndex().row()
+
+        # if the model changed, clamp to bounds
+        row = max(0, min(row, model.rowCount() - 1)) if model.rowCount() else -1
+        if row < 0: return
+
+        view.selectRow(row)
+        idx = model.index(row, 0)
+        self._attach_inst(idx, None)
+                        
 
     # ------------------------------------------------------------
     # Load .annot from a file
-    # ------------------------------------------------------------
         
     def open_annot(self):
 

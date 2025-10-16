@@ -64,8 +64,11 @@ def _parse_args(argv):
 def main(argv=None) -> int:
     args = _parse_args(argv or sys.argv[1:])
     app = QApplication(sys.argv)
+
+    # initiate silent luna
+    proj = lp.proj()
+    proj.silence( True )
     
-    proj = lp.proj()   
     ui = _load_ui()
     controller = Controller(ui, proj)
     ui.show()

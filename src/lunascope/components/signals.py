@@ -25,6 +25,9 @@ import pandas as pd
 import numpy as np
 from collections import defaultdict
 
+from concurrent.futures import ThreadPoolExecutor
+from PySide6.QtCore import QMetaObject, Qt, Slot
+
 import pyqtgraph as pg
 from PySide6.QtWidgets import QProgressBar
 from PySide6.QtCore import QSignalBlocker
@@ -161,7 +164,15 @@ class SignalsMixin:
 
         # get full, original staging from annotations
         stgs = [ 'N1' , 'N2' , 'N3' , 'R' , 'W' , '?' , 'L' ] 
-        stgns = { 'N1': 0.2 , 'N2': 0.1 , 'N3': 0 , 'R': 0.3  , 'W': 0.4 , '?': 0.5 , 'L': 0.6 }
+#        stgns = { 'N1': 0.2 , 'N2': 0.1 , 'N3': 0 , 'R': 0.3  , 'W': 0.4 , '?': 0.5 , 'L': 0.6 }
+        stgns = {'N1': 0.0,
+                 'N2': 0.06666666666666667,
+                 'N3': 0.13333333333333333,
+                'R': 0.2,
+                'W': 0.26666666666666666,
+                '?': 0.3333333333333333,
+                'L': 0.4}
+
         stg_evts = self.p.fetch_annots( stgs , 30 )
         
         if len( stg_evts ) != 0:
@@ -187,7 +198,7 @@ class SignalsMixin:
             for ci, items in bins.items():
                 xi, wi, yi = zip(*items)
                 bg = pg.BarGraphItem(
-                    x=list(xi), width=list(wi), y0=[ x+0.2 for x in list(yi) ], height=[0.25]*len(xi), 
+                    x=list(xi), width=list(wi), y0=[ x+0.25 for x in list(yi) ], height=[0.225]*len(xi), 
                     brush=QtGui.QColor(ci), pen=None )                
                 bg.setZValue(-10)
                 bg.setAcceptedMouseButtons(QtCore.Qt.NoButton)
@@ -215,6 +226,17 @@ class SignalsMixin:
         self.sel.rangeSelected.connect(self.on_window_range)  
         
 
+        # clock ticks at top
+        self.tb0 = TextBatch( vb, QtGui.QFont("Arial", 12), color=(180,255,255), mode='device')
+        self.tb0.setZValue(10)
+        tks = self.ssa.get_hour_ticks()
+        tx = list( tks.keys() )
+        tv = list( tks.values() )
+        tv = [v[:-6] if v.endswith(":00:00") else v for v in tv]  # reduce to | hh
+        self.tb0.setData(tx, [ 0.99 ] * len( tx ) , tv )
+        self.ui.pgh.addItem(self.tb0 , ignoreBounds=True)
+
+        
     # --------------------------------------------------------------------------------
     #
     # called on first attaching, but also after Render: masked hypnogram + segment plot
@@ -312,13 +334,30 @@ class SignalsMixin:
                 pi.addItem(bg)
                 self.updated_hypno.append(bg)
 
-        
+
         
     # --------------------------------------------------------------------------------
     #
     # click Render --> initiate segsrv_t for channel / annotation drawing 
     #
     # --------------------------------------------------------------------------------
+    
+    def _populate_segsrv(self):
+        # compute on separate thread
+        # --> do not touch the GUI here
+        
+        # pre-calculate any summary stats? [ignore for now]
+        #ss.calc_bands( bsigs )
+        #ss.calc_hjorths( hsigs )
+        throttle1_sr = 100 
+        self.ss.input_throttle( throttle1_sr )
+        throttle2_np = 5 * 30 * 100 
+        self.ss.throttle( throttle2_np )
+        summary_mins = 30 
+        self.ss.summary_threshold_mins( summary_mins )
+        # special version that releases the GIL
+        self.ss.segsrv.populate_lunascope( chs = self.ss_chs , anns = self.ss_anns )
+        self.ss.set_annot_format6( False ) # pyqtgraph, not plotly
     
     def _render_signals(self):
 
@@ -333,58 +372,91 @@ class SignalsMixin:
         # for a given EDF instance, take selected channels 
         if len( self.ss_chs ) + len( self.ss_anns ) == 0:
             self.rendered = False
-#            self.sb_render.setText( "Rendered: F" );
             return
 
         # we're now going to have something to plot
         self.rendered = True
-#        self.sb_render.setText( "Rendered: Y" );
 
-        # pre-calculate any summary stats? [ignore for now]
-        #ss.calc_bands( bsigs )
-        #ss.calc_hjorths( hsigs )
+        # ------------------------------------------------------------
+        # do rendering on a separate thread
 
-        self.sb_status = QProgressBar()
-        self.sb_status.setMaximumWidth(100)
-        # start progress bar...
-        self.sb_status.setRange(0, 0)  # busy
+        # ------------------------------------------------------------
+        # execute command string 'cmd' in a separate thread
 
-        throttle1_sr = 100 
-        self.ss.input_throttle( throttle1_sr )
+        # note that we're busy
+        self._busy = True
 
-        throttle2_np = 5 * 30 * 100 
-        self.ss.throttle( throttle2_np )
+        # and do not let other jobs be run
+        self._buttons( False )
 
-        summary_mins = 30 
-        self.ss.summary_threshold_mins( summary_mins )
-
-        self.ss.populate( chs = self.ss_chs , anns = self.ss_anns )
-
-        self.ss.set_annot_format6( False ) # pyqtgraph, not plotly
-
-        # done
-        self.sb_status.setRange(0, 100); self.sb_status.setValue(100)
+        # start progress bar
+        self.sb_progress.setVisible(True)
+        self.sb_progress.setRange(0, 0) 
+        self.sb_progress.setFormat("Running…")
         
-        #
-        # update segment plot
-        #
+        # set up call on different thread
+        fut_ss = self._exec.submit( self._populate_segsrv )  # returns nothing
+                
+        def done_segsrv( _f=fut_ss ):
+            try:
+                exc = _f.exception()
+                if exc is None:
+                    print( 'all good' ) 
+                    # self._last_result = _f.result()  # nothing returned
+                    QMetaObject.invokeMethod(self, "_segsrv_done_ok", Qt.QueuedConnection)
+                else:
+                    self._last_exc = exc
+                    self._last_tb = f"{type(exc).__name__}: {exc}"
+                    QMetaObject.invokeMethod(self, "_segsrv_done_err", Qt.QueuedConnection)
+            except Exception as cb_exc:
+                self._last_exc = cb_exc
+                self._last_tb = f"{type(cb_exc).__name__}: {cb_exc}"
+                QMetaObject.invokeMethod(self, "_segsrv_done_err", Qt.QueuedConnection)
 
+        # add the callback
+        fut_ss.add_done_callback( done_segsrv )
+
+
+
+    @Slot()
+    def _segsrv_done_ok(self):        
+        try:
+            self._complete_rendering()
+        finally:
+            self._busy = False
+            self._buttons( True )
+            self.sb_progress.setRange(0, 100); self.sb_progress.setValue(0)
+            self.sb_progress.setVisible(False)
+            
+    @Slot()
+    def _segsrv_done_err(self):
+        try:
+            # show or log the error; pick one
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.critical(self, "Error rendering sample", self._last_tb)
+        finally:
+            self._busy = False
+            self._buttons( True )
+            self.sb_progress.setRange(0, 100); self.sb_progress.setValue(0)
+            self.sb_progress.setVisible(False)
+
+     
+    def _complete_rendering(self):
+
+        # we can now touch the GUI
+        print( 'done rendering' )
+        
+        # update segment plot
         self._initiate_curves()        
         
-        #
         # plot segments
-        #
-
         num_epochs = self.ss.num_epochs()
         tscale = self.ss.get_time_scale()
         tstarts = [ tscale[idx] for idx in range(0,len(tscale),2)]
         tstops = [ tscale[idx] for idx in range(1,len(tscale),2)]
         times = np.concatenate((tstarts, tstops), axis=1)
 
-        #
-        # ready view
-        #
-
+        # ready to view
         self.ss.window(0,30)        
         self._update_scaling()
         self._update_pg1()
@@ -723,7 +795,6 @@ class SignalsMixin:
             y0 = self.ss.get_annots_yaxes( ann )
             y1 = self.ss.get_annots_yaxes_ends( ann )
             self.annot_curves[aidx].setData( [ x1 , x2 ] , [ ( y0[0] + y1[0] ) / 2  , ( y0[0] + y1[0] ) / 2 ] )
-
 #            self.annot_mgr.toggle( ann , True )
             a0, a1 = _ensure_min_px_width( vb, a0, a1, px=1)  # 1-px minimum
             self.annot_mgr.update_track( ann , x0 = a0 , x1 = a1 , y0 = y0 , y1 = y1 )
@@ -830,7 +901,7 @@ class SignalsMixin:
             ylim = [ mn , mx ] 
             if self.show_labels:
                 tv[idx] = ' ' + ch + ' ' + str(round(ylim[0],3)) + ':' + str(round(ylim[1],3)) + ' (' + self.units[ ch ] +')'
-            yv[idx] = ybase
+            yv[idx] = ybase + 0.5 * h
             # next
             idx = idx + 1
 
@@ -839,7 +910,11 @@ class SignalsMixin:
         self.ssa.compile_windowed_annots( anns )
         anns1 = [self.ssa_anns_lookup[v] for v in anns ]
 
+#        print( 'len(anns)' , len(anns) )
+#        print( 'len(anns1)' , len(anns1) )
+        
         for ann in anns:
+            print('ann',ann,idx,aidx,anns1[aidx] )
             a0 = self.ssa.get_annots_xaxes( ann )            
             if len(a0) == 0:
                 idx = idx + 1

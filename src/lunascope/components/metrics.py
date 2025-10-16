@@ -21,12 +21,13 @@
 
 import pandas as pd
 import numpy as np
+import lunapi as lp
 
 from typing import Callable, Iterable, List, Optional
 
 from PySide6.QtWidgets import QHeaderView, QAbstractItemView, QTableView
 from PySide6.QtGui import QStandardItemModel, QStandardItem, QColor
-from PySide6.QtCore import Qt, QSortFilterProxyModel, QRegularExpression, QModelIndex
+from PySide6.QtCore import Qt, QSortFilterProxyModel, QRegularExpression, QModelIndex, QSignalBlocker
 
 class MetricsMixin:
 
@@ -45,7 +46,9 @@ class MetricsMixin:
         view.resizeColumnsToContents()
         view.setSelectionBehavior(QAbstractItemView.SelectRows)
         view.setSelectionMode(QAbstractItemView.SingleSelection)
-
+        view.horizontalHeader().setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        view.verticalHeader().setVisible(False)
+                
         # annots table
 
         view = self.ui.tbl_desc_annots
@@ -58,8 +61,9 @@ class MetricsMixin:
         view.resizeColumnsToContents()
         view.setSelectionBehavior(QAbstractItemView.SelectRows)
         view.setSelectionMode(QAbstractItemView.SingleSelection)
-    
-        
+        view.horizontalHeader().setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        view.verticalHeader().setVisible(False)
+                
         # wiring
 
         self.ui.butt_sig.clicked.connect( self._toggle_sigs )
@@ -120,7 +124,7 @@ class MetricsMixin:
         else:
             self.units = None
         
-
+            
         # ------------------------------------------------------------
         # populate signal box
 
@@ -145,6 +149,8 @@ class MetricsMixin:
         view.resizeColumnsToContents()
         view.setSelectionBehavior(QAbstractItemView.SelectRows)
         view.setSelectionMode(QAbstractItemView.SingleSelection)
+        view.horizontalHeader().setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        view.verticalHeader().setVisible(False)
         
         add_check_column(
             view,
@@ -173,7 +179,9 @@ class MetricsMixin:
         view.resizeColumnsToContents()
         view.setSelectionBehavior(QAbstractItemView.SelectRows)
         view.setSelectionMode(QAbstractItemView.SingleSelection)
-
+        view.horizontalHeader().setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        view.verticalHeader().setVisible(False)
+        
         add_check_column(
             view,
             channel_col_before_insert=0,
@@ -186,6 +194,23 @@ class MetricsMixin:
         )
         
 
+
+        # --------------------------------------------------------------------------------
+        # redo original populatio of ssa
+
+        # track all original annots
+        self.ssa_anns = self.p.edf.annots()
+        self.ssa_anns_lookup = {v: i for i, v in enumerate(self.ssa_anns)}
+        
+        # but initialize a separate ss for annotations only
+        self.ssa = lp.segsrv( self.p )
+        self.ssa.populate( chs = [ ] , anns = self.ssa_anns )
+        self.ssa.set_annot_format6( False )  # pyqtgraph vs plotly
+        
+        # populate here, as used by plot_simple (prior to render)
+        self.ss_anns = self.ui.tbl_desc_annots.checked()
+        self.ss_chs = self.ui.tbl_desc_signals.checked()
+        
 
     # --------------------------------------------------------------------------------
     # populate annotation instances (updated when annots selected)
@@ -225,7 +250,8 @@ class MetricsMixin:
         view.resizeColumnsToContents()
         view.setSelectionBehavior(QAbstractItemView.SelectRows)
         view.setSelectionMode(QAbstractItemView.SingleSelection)
-
+        view.horizontalHeader().setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        
         sel = view.selectionModel()
         sel.currentRowChanged.connect(self._on_row_changed)
 
@@ -373,7 +399,7 @@ def add_check_column(
     def _set_all(state: Qt.CheckState):
         nonlocal _squelch
         _squelch = True
-        blocker = QtCore.QSignalBlocker(model)  # suppress itemChanged during loop
+        blocker = QSignalBlocker(model)  # suppress itemChanged during loop
         try:
             for r in range(model.rowCount()):
                 it = model.item(r, 0)
@@ -393,7 +419,7 @@ def add_check_column(
         nonlocal _squelch
         xs = set(map(str, xs))
         _squelch = True
-        blocker = QtCore.QSignalBlocker(model)
+        blocker = QSignalBlocker(model)
         try:
             for r in range(model.rowCount()):
                 it = model.item(r, 0)

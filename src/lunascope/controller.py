@@ -27,11 +27,12 @@ import lunapi as lp
 import os, sys, threading
 from concurrent.futures import ThreadPoolExecutor
 
-from PySide6.QtWidgets import QMainWindow, QProgressBar
 from PySide6.QtCore import QModelIndex, QObject, Signal, Qt, QSortFilterProxyModel
 from PySide6.QtGui import QAction, QStandardItemModel
-from PySide6.QtWidgets import QDockWidget, QLabel, QFrame, QSizePolicy, QMessageBox, QLayout
 from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QDockWidget, QLabel, QFrame, QSizePolicy, QMessageBox, QLayout
+from PySide6.QtWidgets import QMainWindow, QProgressBar, QTableView, QAbstractItemView
+
 
 from .components.slist import SListMixin
 from .components.metrics import MetricsMixin
@@ -79,9 +80,12 @@ class Controller( QMainWindow,
         self._init_spec()
         self._init_soap_pops()
 
+        # for the tables added above, ensure all are read-only
+        for v in self.ui.findChildren(QTableView):
+            v.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        
         # redirect luna stderr
 #        restore = redirect_fds_to_widget(self.ui.txt_out, fds=(1,2), label=False)
-
 
         # set up menu items: open projects
         act_load_slist = QAction("Load S-List", self)
@@ -95,7 +99,7 @@ class Controller( QMainWindow,
         act_build_slist.triggered.connect(self.open_folder)
         act_load_edf.triggered.connect(self.open_edf)
         act_load_annot.triggered.connect(self.open_annot)
-        # act_refresh.triggered.connect(self.refresh)
+        act_refresh.triggered.connect(self._refresh)
 
         self.ui.menuProject.addAction(act_load_slist)
         self.ui.menuProject.addAction(act_build_slist)
@@ -260,29 +264,27 @@ class Controller( QMainWindow,
 
         # attach the individual by ID (i.e. as list may be filtered)
         id_str = current.siblingAtColumn(0).data(Qt.DisplayRole)
-        self.p = self.proj.inst( id_str )
-                
+        
+        # attach EDF
+        try:
+            self.p = self.proj.inst( id_str )
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Error",
+                f"Problem attaching individual {id_str}\nError:\n{e}",
+            )
+            return
+            
         # and update things that need updating
         self._update_metrics()
         self._render_histogram()
         self._update_spectrogram_list()
         self._update_soap_list()
+        self._update_params()
 
         # initially, no signals rendered
         self.rendered = False
-
-        # track all original annots
-        self.ssa_anns = self.p.edf.annots()
-        self.ssa_anns_lookup = {v: i for i, v in enumerate(self.ssa_anns)}
-        
-        # but initialize a separate ss for annotations only
-        self.ssa = lp.segsrv( self.p )
-        self.ssa.populate( chs = [ ] , anns = self.ssa_anns )
-        self.ssa.set_annot_format6( False )  # pyqtgraph vs plotly
-        
-        # populate here, as used by plot_simple (prior to render)
-        self.ss_anns = self.ui.tbl_desc_annots.checked()
-        self.ss_chs = self.ui.tbl_desc_signals.checked()
 
         # draw
         self.curves = [ ] 
@@ -306,15 +308,14 @@ class Controller( QMainWindow,
             clear_rows( self.anal_table_proxy , keep_headers = False )
 
         clear_rows( self.ui.tbl_desc_signals )
-
         clear_rows( self.ui.tbl_desc_annots )
-
         clear_rows( self.ui.anal_tables ) 
-
         clear_rows( self.ui.tbl_soap1 )
-
         clear_rows( self.ui.tbl_pops1 )
-        
+        clear_rows( self.ui.tbl_hypno1 )
+        clear_rows( self.ui.tbl_hypno2 )
+        clear_rows( self.ui.tbl_hypno3 )
+
         self.ui.combo_spectrogram.clear()
         self.ui.combo_pops.clear()
         self.ui.combo_soap.clear()

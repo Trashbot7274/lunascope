@@ -918,7 +918,7 @@
             <item>
              <widget class="QPlainTextEdit" name="txt_param">
               <property name="placeholderText">
-               <string>( enter key = value parameters )</string>
+               <string>(  key = value parameters, applied on loading / refreshing the EDF )</string>
               </property>
              </widget>
             </item>
@@ -946,6 +946,31 @@
             </property>
             <item>
              <widget class="QTableView" name="tbl_param"/>
+            </item>
+           </layout>
+          </widget>
+          <widget class="QWidget" name="tab_3">
+           <attribute name="title">
+            <string>Aliases</string>
+           </attribute>
+           <layout class="QHBoxLayout" name="horizontalLayout_24">
+            <property name="spacing">
+             <number>0</number>
+            </property>
+            <property name="leftMargin">
+             <number>0</number>
+            </property>
+            <property name="topMargin">
+             <number>0</number>
+            </property>
+            <property name="rightMargin">
+             <number>0</number>
+            </property>
+            <property name="bottomMargin">
+             <number>0</number>
+            </property>
+            <item>
+             <widget class="QTableView" name="tbl_aliases"/>
             </item>
            </layout>
           </widget>
@@ -1011,7 +1036,7 @@
      <x>0</x>
      <y>0</y>
      <width>1453</width>
-     <height>37</height>
+     <height>24</height>
     </rect>
    </property>
    <widget class="QMenu" name="menuView">
@@ -1317,7 +1342,7 @@
          <item>
           <widget class="QTabWidget" name="widg1">
            <property name="tabPosition">
-            <enum>QTabWidget::TabPosition::North</enum>
+            <enum>QTabWidget::TabPosition::West</enum>
            </property>
            <property name="currentIndex">
             <number>0</number>
@@ -1378,40 +1403,67 @@
                    <property name="bottomMargin">
                     <number>0</number>
                    </property>
-                   <property name="spacing">
+                   <property name="horizontalSpacing">
+                    <number>-1</number>
+                   </property>
+                   <property name="verticalSpacing">
                     <number>0</number>
                    </property>
-                   <item row="1" column="0">
-                    <widget class="QCheckBox" name="check_hypno_annots">
-                     <property name="text">
-                      <string>Add annotations</string>
-                     </property>
-                    </widget>
-                   </item>
-                   <item row="3" column="0">
-                    <widget class="QDateTimeEdit" name="dateTimeEdit"/>
-                   </item>
-                   <item row="5" column="0">
-                    <widget class="QDateTimeEdit" name="dateTimeEdit_2"/>
-                   </item>
-                   <item row="4" column="0">
+                   <item row="4" column="1">
                     <widget class="QCheckBox" name="check_lights_on">
                      <property name="text">
                       <string>Lights on</string>
                      </property>
                     </widget>
                    </item>
-                   <item row="2" column="0">
+                   <item row="7" column="1">
+                    <widget class="QPushButton" name="butt_calc_hypnostats">
+                     <property name="text">
+                      <string>Run HYPNO</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item row="0" column="1">
                     <widget class="QCheckBox" name="check_lights_out">
                      <property name="text">
                       <string>Lights out</string>
                      </property>
                     </widget>
                    </item>
-                   <item row="6" column="0">
-                    <widget class="QPushButton" name="butt_calc_hypnostats">
+                   <item row="5" column="1">
+                    <widget class="QDateTimeEdit" name="dt_lights_on">
+                     <property name="currentSection">
+                      <enum>QDateTimeEdit::Section::DaySection</enum>
+                     </property>
+                     <property name="displayFormat">
+                      <string>dd/MM/yy-HH:mm:ss</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item row="3" column="1">
+                    <widget class="QDateTimeEdit" name="dt_lights_out">
+                     <property name="dateTime">
+                      <datetime>
+                       <hour>0</hour>
+                       <minute>0</minute>
+                       <second>0</second>
+                       <year>2000</year>
+                       <month>1</month>
+                       <day>1</day>
+                      </datetime>
+                     </property>
+                     <property name="currentSection">
+                      <enum>QDateTimeEdit::Section::DaySection</enum>
+                     </property>
+                     <property name="displayFormat">
+                      <string>dd/MM/yy-HH:mm:ss</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item row="6" column="1">
+                    <widget class="QCheckBox" name="check_hypno_annots">
                      <property name="text">
-                      <string>Run HYPNO</string>
+                      <string>Add annotations</string>
                      </property>
                     </widget>
                    </item>
@@ -1419,21 +1471,19 @@
                  </widget>
                 </item>
                 <item>
-                 <widget class="QToolBox" name="toolBox">
+                 <widget class="QTabWidget" name="tabWidget">
+                  <property name="tabPosition">
+                   <enum>QTabWidget::TabPosition::West</enum>
+                  </property>
+                  <property name="tabShape">
+                   <enum>QTabWidget::TabShape::Rounded</enum>
+                  </property>
                   <property name="currentIndex">
                    <number>0</number>
                   </property>
-                  <widget class="QWidget" name="page">
-                   <property name="geometry">
-                    <rect>
-                     <x>0</x>
-                     <y>0</y>
-                     <width>625</width>
-                     <height>76</height>
-                    </rect>
-                   </property>
-                   <attribute name="label">
-                    <string>Primary statistics</string>
+                  <widget class="QWidget" name="tabWidgetPage1">
+                   <attribute name="title">
+                    <string>Base</string>
                    </attribute>
                    <layout class="QHBoxLayout" name="horizontalLayout_14">
                     <property name="spacing">
@@ -1460,17 +1510,9 @@
                     </item>
                    </layout>
                   </widget>
-                  <widget class="QWidget" name="page_3">
-                   <property name="geometry">
-                    <rect>
-                     <x>0</x>
-                     <y>0</y>
-                     <width>98</width>
-                     <height>74</height>
-                    </rect>
-                   </property>
-                   <attribute name="label">
-                    <string>Stage statistics</string>
+                  <widget class="QWidget" name="tabWidgetPage2">
+                   <attribute name="title">
+                    <string>Stages</string>
                    </attribute>
                    <layout class="QHBoxLayout" name="horizontalLayout_13">
                     <property name="spacing">
@@ -1493,17 +1535,9 @@
                     </item>
                    </layout>
                   </widget>
-                  <widget class="QWidget" name="page_2">
-                   <property name="geometry">
-                    <rect>
-                     <x>0</x>
-                     <y>0</y>
-                     <width>98</width>
-                     <height>74</height>
-                    </rect>
-                   </property>
-                   <attribute name="label">
-                    <string>NREM Cycles</string>
+                  <widget class="QWidget" name="tabWidgetPage3">
+                   <attribute name="title">
+                    <string>Cycles</string>
                    </attribute>
                    <layout class="QHBoxLayout" name="horizontalLayout_5">
                     <property name="spacing">

@@ -20,7 +20,8 @@
 #
 #  --------------------------------------------------------------------
 
-from PySide6.QtWidgets import QVBoxLayout, QHeaderView
+from PySide6.QtWidgets import QVBoxLayout, QHeaderView, QMessageBox
+from PySide6.QtCore import Qt
 
 from .mplcanvas import MplCanvas
 from .plts import hypno
@@ -50,7 +51,7 @@ class HypnoMixin:
         # test if we have somebody attached        
         if not hasattr(self, "p"): return
 
-        # who has staging available
+        # who has at least some staging available
         if not self._has_staging(): return
         
         # make hypnogram
@@ -58,28 +59,64 @@ class HypnoMixin:
         hypno(ss.STAGE, ax=self.hypnocanvas.ax)
         self.hypnocanvas.draw_idle()
         
+        # add annotations?
+        cmd_str = 'EPOCH align & HYPNO'
+
+        if self.ui.check_hypno_annots.isChecked():
+            cmd_str += " annot"
+
+        # lights
+        if self.ui.check_lights_out.isChecked():
+            dt = self.ui.dt_lights_out.dateTime()
+            s = dt.toString("dd/MM/yy-HH:mm:ss")
+            cmd_str += " lights-off="+s
+            
+        if self.ui.check_lights_on.isChecked():
+            dt = self.ui.dt_lights_on.dateTime()
+            s = dt.toString("dd/MM/yy-HH:mm:ss")
+            cmd_str += " lights-on="+s
+
         # Luna call to get full HYPNO outputs
-        res = self.p.silent_proc( 'EPOCH align & HYPNO' )
-        
+        try:
+            res = self.p.silent_proc(cmd_str)
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Error",
+                f"Problem running HYPNO:\n{cmd_str}\nCommand failed:\n{e}",
+            )
+            return
+
+        # get outputs        
         df1 = self.p.table( 'HYPNO' )
         df2 = self.p.table( 'HYPNO' , 'SS' )
         df3 = self.p.table( 'HYPNO' , 'C' )
+
+        # update annot list?
+        if self.ui.check_hypno_annots.isChecked():
+            self._update_metrics()
+       
+        # possible that df2 and df3 will be empty - i.e. if only W
         
         # populate tables
+        if df1.empty: return
         df1 = df1.T.reset_index()
         df1.columns = ["Variable", "Value"]        
+        df1 = df1[df1.iloc[:, 0] != "ID"]
         model = self.df_to_model( df1 )
         self.ui.tbl_hypno1.setModel( model )
         view = self.ui.tbl_hypno1
         view.verticalHeader().setVisible(False)
         view.resizeColumnsToContents()
-        view.setSortingEnabled(True)
+        view.setSortingEnabled(False)
         h = view.horizontalHeader()
         h.setSectionResizeMode(QHeaderView.Interactive)
         h.setStretchLastSection(True)
         view.resizeColumnsToContents()
+        view.horizontalHeader().setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
 
         # populate stage table
+        if df2.empty: return
         df2 = df2.drop(columns=["ID"])
         model = self.df_to_model( df2 )
         self.ui.tbl_hypno2.setModel( model )
@@ -91,8 +128,10 @@ class HypnoMixin:
         h.setSectionResizeMode(QHeaderView.Interactive)
         h.setStretchLastSection(True)
         view.resizeColumnsToContents()
-
+        view.horizontalHeader().setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        
         # populate cycle table
+        if df3.empty: return
         df3 = df3.drop(columns=["ID"])
         model = self.df_to_model( df3 )
         self.ui.tbl_hypno3.setModel(model)
@@ -104,5 +143,5 @@ class HypnoMixin:
         h.setSectionResizeMode(QHeaderView.Interactive)
         h.setStretchLastSection(True)
         view.resizeColumnsToContents()
-        
+        view.horizontalHeader().setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         
