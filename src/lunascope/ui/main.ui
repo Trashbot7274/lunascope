@@ -1014,21 +1014,24 @@
      <height>37</height>
     </rect>
    </property>
-   <widget class="QMenu" name="menuProject">
-    <property name="title">
-     <string>Project</string>
-    </property>
-    <addaction name="actionOpen"/>
-    <addaction name="separator"/>
-    <addaction name="actionQuit_2"/>
-   </widget>
    <widget class="QMenu" name="menuView">
     <property name="title">
      <string>View</string>
     </property>
    </widget>
+   <widget class="QMenu" name="menuProject">
+    <property name="title">
+     <string>Project</string>
+    </property>
+   </widget>
+   <widget class="QMenu" name="menuAbout">
+    <property name="title">
+     <string>About</string>
+    </property>
+   </widget>
    <addaction name="menuProject"/>
    <addaction name="menuView"/>
+   <addaction name="menuAbout"/>
   </widget>
   <widget class="QDockWidget" name="dock_help">
    <property name="floating">
@@ -1425,8 +1428,8 @@
                     <rect>
                      <x>0</x>
                      <y>0</y>
-                     <width>741</width>
-                     <height>74</height>
+                     <width>625</width>
+                     <height>76</height>
                     </rect>
                    </property>
                    <attribute name="label">
@@ -1458,6 +1461,14 @@
                    </layout>
                   </widget>
                   <widget class="QWidget" name="page_3">
+                   <property name="geometry">
+                    <rect>
+                     <x>0</x>
+                     <y>0</y>
+                     <width>98</width>
+                     <height>74</height>
+                    </rect>
+                   </property>
                    <attribute name="label">
                     <string>Stage statistics</string>
                    </attribute>
@@ -1487,7 +1498,7 @@
                     <rect>
                      <x>0</x>
                      <y>0</y>
-                     <width>741</width>
+                     <width>98</width>
                      <height>74</height>
                     </rect>
                    </property>
@@ -1997,7 +2008,7 @@
     <string>Quit</string>
    </property>
   </action>
-  <action name="actionOpen">
+  <action name="action">
    <property name="text">
     <string>Open</string>
    </property>
@@ -2055,6 +2066,11 @@
   <action name="actionShow_Outputs">
    <property name="text">
     <string>Show Outputs</string>
+   </property>
+  </action>
+  <action name="actionHelp">
+   <property name="text">
+    <string>Help</string>
    </property>
   </action>
  </widget>

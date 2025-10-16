@@ -1,33 +1,39 @@
+#  --------------------------------------------------------------------
+#
+#  This file is part of Luna.
+#
+#  LUNA is free software: you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License as published by
+#  the Free Software Foundation, either version 3 of the License, or
+#  (at your option) any later version.
+# 
+#  Luna is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+# 
+#  You should have received a copy of the GNU General Public License
+#  along with Luna. If not, see <http:#www.gnu.org/licenses/>.
+# 
+#  Please see LICENSE.txt for more details.
+#
+#  --------------------------------------------------------------------
+
 import pandas as pd
 import numpy as np
-from os import fspath
 
 from typing import Callable, Iterable, List, Optional
 
-from PySide6.QtWidgets import QApplication, QFileDialog, QTableView, QHeaderView, QLineEdit, QAbstractItemView
-from PySide6.QtCore import Qt, QFile, QRegularExpression
-from PySide6.QtGui import QStandardItemModel, QStandardItem
-from PySide6.QtCore import QModelIndex
-from PySide6.QtCore import Qt, QItemSelection, QSortFilterProxyModel, QRegularExpression
+from PySide6.QtWidgets import QHeaderView, QAbstractItemView, QTableView
+from PySide6.QtGui import QStandardItemModel, QStandardItem, QColor
+from PySide6.QtCore import Qt, QSortFilterProxyModel, QRegularExpression, QModelIndex
 
-import sys
-
-from dataclasses import dataclass
-
-from PySide6.QtCore import Qt, QAbstractTableModel, QModelIndex, QPoint, Signal
-from PySide6.QtGui import QColor
-from PySide6.QtWidgets import (
-    QApplication, QMainWindow, QTableView, QDockWidget, QWidget, QFormLayout,
-    QHBoxLayout, QVBoxLayout, QSpinBox, QComboBox, QCheckBox, QLabel, QColorDialog )
-
-    
 class MetricsMixin:
 
     def _init_metrics(self):
 
-        #
+        
         # signal table
-        #
 
         view = self.ui.tbl_desc_signals
         view.setSortingEnabled(True)
@@ -40,13 +46,7 @@ class MetricsMixin:
         view.setSelectionBehavior(QAbstractItemView.SelectRows)
         view.setSelectionMode(QAbstractItemView.SingleSelection)
 
-        #
         # annots table
-        #
-
-#        view = self.ui.tbl_desc_annots
-#        view.verticalHeader().setVisible(False)
-#        view.resizeColumnsToContents()
 
         view = self.ui.tbl_desc_annots
         view.setSortingEnabled(True)
@@ -61,6 +61,7 @@ class MetricsMixin:
     
         
         # wiring
+
         self.ui.butt_sig.clicked.connect( self._toggle_sigs )
         self.ui.butt_annot.clicked.connect( self._toggle_annots )
 
@@ -81,55 +82,47 @@ class MetricsMixin:
             self.ui.tbl_desc_annots.select_none_checks()
         self._update_pg1()
 
+
     # ------------------------------------------------------------
     # Attach EDF
-    # ------------------------------------------------------------
 
     def _update_metrics(self):
 
         # ------------------------------------------------------------
-        #
         # EDF header metrics --> status bar
-        #
-        # ------------------------------------------------------------
-
         
-        self.p.silent_proc( 'HEADERS' )
-
+        self.p.silent_proc( 'HEADERS & EPOCH align' )
         df = self.p.table( 'HEADERS' )
-
         edf_id = self.p.id()
-
         rec_dur_hms = df.iloc[0, df.columns.get_loc('REC_DUR_HMS')]
-
         tot_dur_hms = df.iloc[0, df.columns.get_loc('TOT_DUR_HMS')]
-
-        edf_type = df.iloc[0, df.columns.get_loc('EDF_TYPE')]
-        
+        edf_type = df.iloc[0, df.columns.get_loc('EDF_TYPE')]        
         edf_na = self.p.annots().size
-
         edf_ns = df.iloc[0, df.columns.get_loc('NS')]
-
         edf_starttime = df.iloc[0, df.columns.get_loc('START_TIME')]
-
         edf_startdate = df.iloc[0, df.columns.get_loc('START_DATE')]
+        df = self.p.table( 'EPOCH' )
+        edf_ne = df.iloc[0, df.columns.get_loc('NE')]
 
-        # update status bar widgets
-        
         self.sb_id.setText( f"{edf_type}: {edf_id}" )
-
         self.sb_start.setText( f"Start time: {edf_starttime} date: {edf_startdate}" )
-
-        self.sb_dur.setText( f"Duration: {rec_dur_hms} / {tot_dur_hms}" )
-
+        self.sb_dur.setText( f"Duration: {rec_dur_hms} / {tot_dur_hms} / {edf_ne} epochs" )
         self.sb_ns.setText( f"{edf_ns} signals, {edf_na} annotations" )
 
         
+        # --------------------------------------------------------------------------------
+        # get units (for plot labels) 
+
+        hdr = self.p.headers()
+
+        if hdr is not None:
+            self.units = dict( zip( hdr.CH , hdr.PDIM ) )
+        else:
+            self.units = None
+        
+
         # ------------------------------------------------------------
-        #
-        # Signal box
-        #
-        # ------------------------------------------------------------
+        # populate signal box
 
         df = self.p.table( 'HEADERS' , 'CH' )
         # may be empty EDF
@@ -152,15 +145,6 @@ class MetricsMixin:
         view.resizeColumnsToContents()
         view.setSelectionBehavior(QAbstractItemView.SelectRows)
         view.setSelectionMode(QAbstractItemView.SingleSelection)
-
-#        view = self.ui.tbl_desc_signals
-#        view.verticalHeader().setVisible(False)
-#        view.resizeColumnsToContents()
-#        view.setSortingEnabled(False)
-#        h = view.horizontalHeader()
-#        h.setStretchLastSection(True)
-#        h.setSectionResizeMode(QHeaderView.Interactive)
-
         
         add_check_column(
             view,
@@ -170,67 +154,41 @@ class MetricsMixin:
             on_change=lambda _: ( self._clear_pg1(), self._update_scaling(), self._update_pg1() ) 
         )
 
-        #
-        # enable DnD for rows
-        #
-        
-#        enable_row_dnd( view )
 
 
         # --------------------------------------------------------------------------------
-        # units for plots
-
-        hdr = self.p.headers()
-
-        if hdr is not None:
-            self.units = dict( zip( hdr.CH , hdr.PDIM ) )
-        else:
-            self.units = None
-
-        # --------------------------------------------------------------------------------
-        #
-        # annotations
-        #
-        # --------------------------------------------------------------------------------
+        # populate annotations box
 
         df = self.p.annots()
         model = self.df_to_model( df )
         self.ui.tbl_desc_annots.setModel( model )
         
-#        view = self.ui.tbl_desc_annots
-#        view.verticalHeader().setVisible(False)
-#        view.resizeColumnsToContents()
-
         view = self.ui.tbl_desc_annots
         view.setSortingEnabled(True)
         h = view.horizontalHeader()
         h.setSectionResizeMode(QHeaderView.Interactive)
-        h.setStretchLastSection(False)
+        h.setStretchLastSection(True)
         h.setMinimumSectionSize(50)
         h.setDefaultSectionSize(150)
         view.resizeColumnsToContents()
         view.setSelectionBehavior(QAbstractItemView.SelectRows)
         view.setSelectionMode(QAbstractItemView.SingleSelection)
 
-
         add_check_column(
             view,
             channel_col_before_insert=0,
             header_text="Sel",
             initial_checked=[ ],
-            on_change= lambda anns: ( self._update_instances(anns), self._clear_pg1(), self._update_scaling(), self._update_pg1() )
+            on_change= lambda anns: ( self._update_instances(anns),
+                                      self._clear_pg1(),
+                                      self._update_scaling(),
+                                      self._update_pg1() )
         )
         
-        # fill to right edge...
-        h = view.horizontalHeader()
-        h.setStretchLastSection(True)
-        h.setSectionResizeMode(QHeaderView.Interactive)
-        
+
+
     # --------------------------------------------------------------------------------
-    #
-    # annotation instances (updated when annots selected)
-    #
-    # --------------------------------------------------------------------------------                 
+    # populate annotation instances (updated when annots selected)
 
     def _update_instances(self, anns):
         evts = pd.Series(self.ssa.get_all_annots(anns))
@@ -271,7 +229,9 @@ class MetricsMixin:
         sel = view.selectionModel()
         sel.currentRowChanged.connect(self._on_row_changed)
 
-                   
+
+    # ------------------------------------------------------------    
+    # events table: allow filtering of events
 
     def _on_events_filter_text(self, text: str):
         rx = QRegularExpression(QRegularExpression.escape(text))
@@ -279,8 +239,9 @@ class MetricsMixin:
         self.events_table_proxy.setFilterRegularExpression(rx)
 
 
+    # ------------------------------------------------------------    
+    # events table: row-change callback
 
-    # row-change callback
     def _on_row_changed(self, curr: QModelIndex, _prev: QModelIndex):
         if not curr.isValid():
             return
@@ -341,11 +302,6 @@ def expand_interval(left, right, *, factor=2.0, point_width=10.0, min_left=0.0):
 
 
 
-from typing import Iterable, Optional, Callable, List
-from PySide6 import QtCore
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QTableView, QHeaderView
-from PySide6.QtGui import QStandardItemModel, QStandardItem
 
 def add_check_column(
     view: QTableView,
@@ -465,49 +421,3 @@ def add_check_column(
         setattr(model, "_checkcol_connected", True)
 
     view.setSortingEnabled(prev_sort)
-
-
-    
-
-def enable_row_dnd(view: QTableView) -> None:
-    """
-    Enable robust row drag/drop reordering on a QTableView with a QStandardItemModel.
-    Reimplements moveRows() so rows are moved, not copied.
-    """
-
-    model = view.model()
-    if not isinstance(model, QStandardItemModel):
-        raise TypeError("Model must be QStandardItemModel")
-
-    # Patch moveRows into the model if not already defined
-    if not hasattr(model, "_dnd_moveRows_patched"):
-        def moveRows(src_parent, src_row, count, dst_parent, dst_row):
-            if src_parent.isValid() or dst_parent.isValid():
-                return False
-            if src_row <= dst_row < src_row + count:
-                return False
-            model.beginMoveRows(src_parent, src_row, src_row + count - 1,
-                                dst_parent, dst_row)
-            rows = [model.takeRow(src_row) for _ in range(count)]
-            if dst_row > src_row:
-                dst_row -= count
-            for i, row in enumerate(rows):
-                model.insertRow(dst_row + i, row)
-            model.endMoveRows()
-            return True
-        # attach dynamically
-        model.moveRows = moveRows  # type: ignore
-        model.supportedDropActions = lambda: Qt.MoveAction
-        model.flags = lambda index, f=model.flags: f(index) | Qt.ItemIsDragEnabled | Qt.ItemIsDropEnabled
-        model._dnd_moveRows_patched = True
-
-    # Configure the view
-    view.setDragDropMode(QTableView.InternalMove)
-    view.setDefaultDropAction(Qt.MoveAction)
-    view.setDragDropOverwriteMode(False)
-    view.setSelectionBehavior(QTableView.SelectRows)
-    view.setSelectionMode(QTableView.SingleSelection)
-    view.setDragEnabled(True)
-    view.setAcceptDrops(True)
-    view.setDropIndicatorShown(True)
-

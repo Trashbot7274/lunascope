@@ -1,20 +1,34 @@
-import lunapi as lp
-import pandas as pd
-
-from typing import List, Tuple
-from PySide6.QtWidgets import QPlainTextEdit, QFileDialog, QMessageBox
-from PySide6.QtCore import QObject, QThread, Signal, Slot
-# import re
-
-from concurrent.futures import ThreadPoolExecutor
-from PySide6.QtCore import QMetaObject, Qt, Slot
-import traceback
+#  --------------------------------------------------------------------
+#
+#  This file is part of Luna.
+#
+#  LUNA is free software: you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License as published by
+#  the Free Software Foundation, either version 3 of the License, or
+#  (at your option) any later version.
+# 
+#  Luna is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+# 
+#  You should have received a copy of the GNU General Public License
+#  along with Luna. If not, see <http:#www.gnu.org/licenses/>.
+# 
+#  Please see LICENSE.txt for more details.
+#
+#  --------------------------------------------------------------------
 
 import sys, traceback
-from PySide6.QtCore import QObject, Signal
-from PySide6.QtGui import QTextCursor
-from PySide6.QtGui import QStandardItemModel, QStandardItem
+import pandas as pd
+from typing import List, Tuple
+
+from concurrent.futures import ThreadPoolExecutor
+
+from PySide6.QtWidgets import QPlainTextEdit, QFileDialog, QMessageBox
+from PySide6.QtCore import QMetaObject, Qt, Slot
 from PySide6.QtCore import Qt, QItemSelection, QSortFilterProxyModel, QRegularExpression
+from PySide6.QtGui import QStandardItemModel, QStandardItem
 from PySide6.QtWidgets import QAbstractItemView, QHeaderView
 
 
@@ -22,7 +36,6 @@ class AnalMixin:
 
     # ------------------------------------------------------------
     # Initiate analysis tab
-    # ------------------------------------------------------------
 
     def _init_anal(self):
 
@@ -32,9 +45,7 @@ class AnalMixin:
 
         self.ui.butt_anal_save.clicked.connect( self._save_luna )
 
-        #
         # tree 'destrat' view
-        #
 
         m = QStandardItemModel(self)
         m.setHorizontalHeaderLabels(["Command", "Strata"])
@@ -49,9 +60,7 @@ class AnalMixin:
         self.ui.anal_tables.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.ui.anal_tables.setSelectionMode(QAbstractItemView.SingleSelection)
 
-    #
     # wire filter for slists
-    #
     
     def _on_flt_table_text(self, t: str):
         rx = QRegularExpression(QRegularExpression.escape(t))
@@ -61,7 +70,6 @@ class AnalMixin:
         
     # ------------------------------------------------------------
     # Run a Luna command
-    # ------------------------------------------------------------
 
     def _exec_luna(self):
         
@@ -210,11 +218,12 @@ class AnalMixin:
 
 
     def _save_luna(self):
+
         new_file = self.ui.txt_inp.toPlainText()
 
         filename, _ = QFileDialog.getSaveFileName(
             self,
-            "Save Luna Script To txt",
+            "Save Luna Script To .txt",
             "",
             "Text Files (*.txt);;All Files (*)"
         )
@@ -230,8 +239,7 @@ class AnalMixin:
 
 
     # ------------------------------------------------------------
-    # handle output table
-    # ------------------------------------------------------------
+    # handle output tables
                 
     def _update_table(self, cmd , stratum ):
         
@@ -266,7 +274,6 @@ class AnalMixin:
 
     # ------------------------------------------------------------
     # tree helpers
-    # ------------------------------------------------------------
 
     def set_tree_from_df(self, df):
         m = QStandardItemModel(self)
@@ -329,10 +336,10 @@ class AnalMixin:
 
     # ------------------------------------------------------------
     # helper - parse parameter file
-    # ------------------------------------------------------------
     
     def _tokenize_pair_line(self,line: str) -> list[str]:
-        # split on space/tab/'=' outside quotes; support "..." and '...' with backslash escapes
+        # split on space/tab/'=' outside quotes;
+        # support "..." and '...' with backslash escapes
         tokens, buf, q, esc = [], [], None, False
         for ch in line:
             if esc:
@@ -363,7 +370,3 @@ class AnalMixin:
                 continue
             pairs.append((a, b))
         return pairs
-
-
-    
-            

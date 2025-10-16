@@ -1,14 +1,31 @@
-# src/lunascope/app.py
+
+#  --------------------------------------------------------------------
+#
+#  This file is part of Luna.
+#
+#  LUNA is free software: you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License as published by
+#  the Free Software Foundation, either version 3 of the License, or
+#  (at your option) any later version.
+#
+#  Luna is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with Luna. If not, see <http:#www.gnu.org/licenses/>.
+#
+#  Please see LICENSE.txt for more details.
+#
+#  --------------------------------------------------------------------
+
+import lunapi as lp
 
 import argparse
 from pathlib import Path
-from os import fspath, path
-import os, sys
+import sys, os
 
-# suppress macOS warnings
-os.environ["OS_ACTIVITY_MODE"] = "disable"
-
-import lunapi as lp
 import pyqtgraph as pg
 from PySide6.QtCore import QFile
 from PySide6.QtUiTools import QUiLoader
@@ -16,6 +33,9 @@ from PySide6.QtWidgets import QApplication
 from importlib.resources import files, as_file
 
 from .controller import Controller
+
+# suppress macOS warnings
+os.environ["OS_ACTIVITY_MODE"] = "disable"
 
 
 def _load_ui():

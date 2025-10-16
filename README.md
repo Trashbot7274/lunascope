@@ -4,9 +4,9 @@ A viewer and frontend for Luna (http://zzz.bwh.harvard.edu/luna/)
 
 Requirements: 
 
- - Python 3.9 - 3.14
+ - Python 3.9 - 3.13: 3.14 currently not supported.
 
- - Compatible with CPython. PyPy not supported.
+ - Compatible with CPython: PyPy not supported.
 
  - Depends on [lunapi](https://pypi.org/project/lunapi/), the Python
  version of the core [Luna](https://zzz.bwh.harvard.edu/luna/) library. This binary

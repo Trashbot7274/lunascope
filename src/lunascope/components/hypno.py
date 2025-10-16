@@ -1,9 +1,26 @@
-import pandas as pd
-import numpy as np
-import lunapi as lp
 
-from PySide6.QtWidgets import QApplication, QVBoxLayout, QTableView
-from PySide6.QtWidgets import QHeaderView
+#  --------------------------------------------------------------------
+#
+#  This file is part of Luna.
+#
+#  LUNA is free software: you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License as published by
+#  the Free Software Foundation, either version 3 of the License, or
+#  (at your option) any later version.
+# 
+#  Luna is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+# 
+#  You should have received a copy of the GNU General Public License
+#  along with Luna. If not, see <http:#www.gnu.org/licenses/>.
+# 
+#  Please see LICENSE.txt for more details.
+#
+#  --------------------------------------------------------------------
+
+from PySide6.QtWidgets import QVBoxLayout, QHeaderView
 
 from .mplcanvas import MplCanvas
 from .plts import hypno
@@ -11,17 +28,18 @@ from .plts import hypno
 class HypnoMixin:
 
     def _init_hypno(self):
+
         self.ui.host_hypnogram.setLayout(QVBoxLayout())
         self.hypnocanvas = MplCanvas(self.ui.host_hypnogram)
         self.ui.host_hypnogram.layout().setContentsMargins(0,0,0,0)
         self.ui.host_hypnogram.layout().addWidget( self.hypnocanvas )
 
-        # calc hypnostats
+        # wiring
         self.ui.butt_calc_hypnostats.clicked.connect( self._calc_hypnostats )
+
 
     # ------------------------------------------------------------
     # Run hypnostats
-    # ------------------------------------------------------------
 
     def _calc_hypnostats(self):
 
@@ -86,12 +104,5 @@ class HypnoMixin:
         h.setSectionResizeMode(QHeaderView.Interactive)
         h.setStretchLastSection(True)
         view.resizeColumnsToContents()
-        
-        # channel details
-#        df = self.p.table( 'HEADERS' , 'CH' )        
-#        df = df[ [ 'CH' , 'PDIM' , 'SR' , 'PMIN', 'PMAX' ] ]
-#        model = self.df_to_model( df )
-#        self.ui.tbl_desc_signals.setModel( model )
-
         
         

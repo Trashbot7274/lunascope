@@ -1,14 +1,32 @@
+#  --------------------------------------------------------------------
+#
+#  This file is part of Luna.
+#
+#  LUNA is free software: you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License as published by
+#  the Free Software Foundation, either version 3 of the License, or
+#  (at your option) any later version.
+# 
+#  Luna is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+# 
+#  You should have received a copy of the GNU General Public License
+#  along with Luna. If not, see <http:#www.gnu.org/licenses/>.
+# 
+#  Please see LICENSE.txt for more details.
+#
+#  --------------------------------------------------------------------
 
-from PySide6.QtWidgets import QApplication, QVBoxLayout, QTableView, QMessageBox
+from PySide6.QtWidgets import QVBoxLayout, QMessageBox
 from PySide6.QtCore import Qt
-import os, sys
+import os
+from pathlib import Path
+import pandas as pd
 
 from .mplcanvas import MplCanvas
 from .plts import hypno_density, hypno
-import pandas as pd
-
-import os
-from pathlib import Path
         
 class SoapPopsMixin:
 
@@ -60,7 +78,6 @@ class SoapPopsMixin:
         
     # ------------------------------------------------------------
     # Run SOAP
-    # ------------------------------------------------------------
 
     def _calc_soap(self):
 
@@ -107,12 +124,9 @@ class SoapPopsMixin:
         df = df[ [ 'PRIOR', 'PRED' , 'PP_N1' , 'PP_N2', 'PP_N3', 'PP_R', 'PP_W' , 'DISC' ] ]                                                     
         hypno_density( df , ax=self.soapcanvas.ax)                                                                                               
         self.soapcanvas.draw_idle()                                                                                                              
-       
-
-        
+               
     # ------------------------------------------------------------
     # Run POPS
-    # ------------------------------------------------------------
 
     def _calc_pops(self):
       
@@ -164,13 +178,10 @@ class SoapPopsMixin:
         # outputs
 
         df1 = self.p.table( 'RUN_POPS' )
-
         df2 = self.p.table( 'RUN_POPS' , 'SS' )
         
         # main output table (tbl_pops1)
-
         df = pd.DataFrame(columns=["Variable", "Value"])
-
 
         # concordance w/ any existing staging
         if has_staging:
@@ -196,8 +207,7 @@ class SoapPopsMixin:
         df.loc[len(df)] = ['R (mins)', (float(v.iloc[0]) if not v.empty else np.nan)]
 
         model = self.df_to_model( df )
-        self.ui.tbl_pops1.setModel( model )
-        
+        self.ui.tbl_pops1.setModel( model )        
             
         # epoch-level outputs
         df = self.p.table( 'RUN_POPS' , 'E' )

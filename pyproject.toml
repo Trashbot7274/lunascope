@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "lunascope"
-version = "0.1.5"
-description = "Sleep-EEG viewer"
+version = "0.1.6"
+description = "Sleep-EEG viewer and interface to Luna"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.9, <3.14"
 license = {file = "LICENSE"}
 authors = [
   {name = "Lorcan Purcell", email = "lpurcell26@nmhschool.org"  },
@@ -15,17 +15,16 @@ authors = [
   {name = "Nataliia Kozhemiako", email = "nkozhemiako@bwh.harvard.edu"} ]
 
 dependencies = [
- "lunapi>=1.3.2",
+ "lunapi>=1.3.3",
  "PySide6>=6.10.0",  
  "pyqtgraph==0.13.7",
  "numpy",
  "pandas",
- "matplotlib",
-  # add others you actually import
+ "matplotlib"
 ]
 
 [project.scripts]
-lunascope = "lunascope.app:main"   # enables `lunascope`
+lunascope = "lunascope.app:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
