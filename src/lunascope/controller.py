@@ -84,9 +84,6 @@ class Controller( QMainWindow,
         for v in self.ui.findChildren(QTableView):
             v.setEditTriggers(QAbstractItemView.NoEditTriggers)
         
-        # redirect luna stderr
-#        restore = redirect_fds_to_widget(self.ui.txt_out, fds=(1,2), label=False)
-
         # set up menu items: open projects
         act_load_slist = QAction("Load S-List", self)
         act_build_slist = QAction("Build S-List", self)
@@ -137,7 +134,8 @@ class Controller( QMainWindow,
                     box.setTextFormat(Qt.RichText),
                     box.setText(
                         f"<p>Lunascope v{__version__}</p>"
-                        "<p>Documentation:<br> <a href='http://zzz-luna.org/lunascope'>http://zzz-luna.org/lunascope</a></p>"
+                        "<p>Documentation:<br> <a href='http://zzz-luna.org/lunascope'>"
+                        "http://zzz-luna.org/lunascope</a></p>"
                         "<p>Created by Shaun Purcell</p>"
                         "<p>Developed and maintained by Lorcan Purcell</p>"
                     ),
@@ -278,7 +276,7 @@ class Controller( QMainWindow,
             
         # and update things that need updating
         self._update_metrics()
-        self._render_histogram()
+        self._render_hypnogram()
         self._update_spectrogram_list()
         self._update_soap_list()
         self._update_params()
@@ -467,52 +465,3 @@ def add_dock_shortcuts(win, view_menu):
             act.setShortcut("Ctrl+-")
 
     return act_show_all
-
-
-
-
-# ------------------------------------------------------------
-# helper: redirect stderr to widget
-
-class _FdPump(QObject):
-    line = Signal(str)
-    
-def redirect_fds_to_widget(widget, fds=(1, 2), label=True):
-    """
-    Redirect given OS fds (1=stdout, 2=stderr) to a QPlainTextEdit-like widget.
-    Returns a restore() function. Use in try/finally.
-    """
-    pump = _FdPump()
-    pump.line.connect(widget.appendPlainText)
-
-    readers = []
-    saved = []
-    for fd in fds:
-        r, w = os.pipe()
-        saved.append(os.dup(fd))      # save original
-        os.dup2(w, fd)                # redirect fd -> pipe write end
-        os.close(w)
-
-        def _reader(pipe_r=r, tag=("stdout" if fd == 1 else "stderr")):
-            with os.fdopen(pipe_r, "r", buffering=1, errors="replace") as f:
-                for line in f:
-                    msg = f"[{tag}] {line.rstrip()}" if label else line.rstrip()
-                    pump.line.emit(msg)
-
-        t = threading.Thread(target=_reader, daemon=True)
-        t.start()
-        readers.append(t)
-    
-    
-    def restore():
-        # flush Python-level streams first
-        try: sys.stdout.flush()
-        except Exception: pass
-        try: sys.stderr.flush()
-        except Exception: pass
-
-        for fd, old in zip(fds, saved):
-            os.dup2(old, fd)
-            os.close(old)
-
-    return restore

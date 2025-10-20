@@ -38,7 +38,6 @@ class HypnoMixin:
         # wiring
         self.ui.butt_calc_hypnostats.clicked.connect( self._calc_hypnostats )
 
-
     # ------------------------------------------------------------
     # Run hypnostats
 

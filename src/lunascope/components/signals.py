@@ -106,11 +106,10 @@ class SignalsMixin:
     # --------------------------------------------------------------------------------
 
 
-    def _render_histogram(self):
+    def _render_hypnogram(self):
 
         # ------------------------------------------------------------
         # initiate segsrv 
-        # ------------------------------------------------------------
         
         self.ss = lp.segsrv( self.p )
                 
@@ -126,10 +125,35 @@ class SignalsMixin:
                 
         # option defaults
         self.show_labels = True
+
         
         # ------------------------------------------------------------
-        # hypnogram init
+        # set lights out/on
+
+        res = self.p.silent_proc( 'HEADERS' )
+        df = self.p.table( 'HEADERS' )
+
+        start_date = str(df["START_DATE"].iloc[0])
+        start_time = str(df["START_TIME"].iloc[0])
+        stop_date = str(df["STOP_DATE"].iloc[0])
+        stop_time = str(df["STOP_TIME"].iloc[0])
+        
+        start = start_date + "-" + start_time
+        stop = stop_date + "-" + stop_time
+
+        # time/date formats w/ '.' from HEADERS:
+        dt_start = QtCore.QDateTime.fromString(start, "dd.MM.yy-HH.mm.ss")
+        dt_stop = QtCore.QDateTime.fromString(stop, "dd.MM.yy-HH.mm.ss")
+
+        # set widget
+        self.ui.dt_lights_out.setDateTime(dt_start)
+        self.ui.dt_lights_out.setDisplayFormat("dd/MM/yy-HH:mm:ss")
+
+        self.ui.dt_lights_on.setDateTime(dt_stop)
+        self.ui.dt_lights_on.setDisplayFormat("dd/MM/yy-HH:mm:ss")
+
         # ------------------------------------------------------------
+        # hypnogram init
 
         h = self.ui.pgh
         pi = h.getPlotItem()
@@ -444,7 +468,6 @@ class SignalsMixin:
     def _complete_rendering(self):
 
         # we can now touch the GUI
-        print( 'done rendering' )
         
         # update segment plot
         self._initiate_curves()        
