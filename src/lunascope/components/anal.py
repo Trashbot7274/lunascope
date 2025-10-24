@@ -25,6 +25,8 @@ from typing import List, Tuple
 
 from concurrent.futures import ThreadPoolExecutor
 
+from  ..helpers import clear_rows
+
 from PySide6.QtWidgets import QPlainTextEdit, QFileDialog, QMessageBox
 from PySide6.QtCore import QMetaObject, Qt, Slot
 from PySide6.QtCore import Qt, QItemSelection, QSortFilterProxyModel, QRegularExpression
@@ -45,6 +47,9 @@ class AnalMixin:
 
         self.ui.butt_anal_save.clicked.connect( self._save_luna )
 
+        self.ui.butt_anal_clear.clicked.connect( self._clear_luna )
+
+        
         # tree 'destrat' view
 
         m = QStandardItemModel(self)
@@ -60,12 +65,6 @@ class AnalMixin:
         self.ui.anal_tables.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.ui.anal_tables.setSelectionMode(QAbstractItemView.SingleSelection)
 
-    # wire filter for slists
-    
-    def _on_flt_table_text(self, t: str):
-        rx = QRegularExpression(QRegularExpression.escape(t))
-        rx.setPatternOptions(QRegularExpression.CaseInsensitiveOption)
-        self._proxy.setFilterRegularExpression(rx)
 
         
     # ------------------------------------------------------------
@@ -80,6 +79,10 @@ class AnalMixin:
         if self._busy:
             return  # or show a status message
 
+        # clear any old output
+        clear_rows( self.ui.anal_tables )
+        clear_rows( self.ui.anal_table )
+        
         # note that we're busy
         self._busy = True
 
@@ -128,7 +131,6 @@ class AnalMixin:
                 self._last_tb = f"{type(cb_exc).__name__}: {cb_exc}"
                 #self._last_tb = "".join(traceback.format_exception(type(cb_exc), cb_exc, cb_exc.__traceback__))
                 QMetaObject.invokeMethod(self, "_eval_done_err", Qt.QueuedConnection)
-
                 
         fut.add_done_callback(done)
 
@@ -140,6 +142,7 @@ class AnalMixin:
             self.ui.txt_out.setPlainText( self._last_result )
             # and get tables
             tbls = self.p.strata()
+            # show outputs from last command
             self._render_tables(tbls)
         finally:
             self._busy = False
@@ -147,6 +150,7 @@ class AnalMixin:
             # stop progress
             self.sb_progress.setRange(0, 100); self.sb_progress.setValue(0)
             self.sb_progress.setVisible(False)
+
             
     @Slot()
     def _eval_done_err(self):
@@ -160,6 +164,8 @@ class AnalMixin:
             self._buttons( True )
             self.sb_progress.setRange(0, 100); self.sb_progress.setValue(0)
             self.sb_progress.setVisible(False)
+            # turn off any prior REPORT hides
+            self.p.silent_proc( 'REPORT show-all' )
 
     def _buttons( self, status ):
         self.ui.butt_anal_exec.setEnabled(status)
@@ -195,7 +201,13 @@ class AnalMixin:
             for row in tbls.itertuples(index=True):
                 v = "_".join( [ row.Command , row.Strata ] )
                 self.results[ v ] = self.p.table( row.Command, row.Strata )
-        
+
+        # we're now finished w/ the internal Luna tables: run this command
+        # just in case the user run REPORT hide of some flavor, e.g. to
+        # make sure the silent_proc() calls work as expected, e.g. used
+        # used below
+        self.p.silent_proc( 'REPORT show-all' )
+
         # update main metrics tables (i.e. if new things added)
         self._update_metrics()
         self._update_spectrogram_list()
@@ -206,7 +218,17 @@ class AnalMixin:
         self.ui.tbl_desc_annots.set( self.curr_anns )
         self._update_instances( self.curr_anns )
 
-        
+
+
+    # ------------------------------------------------------------
+    # clear luna script box
+
+    def _clear_luna(self):
+        self.ui.txt_inp.clear() 
+
+
+    # ------------------------------------------------------------
+    # load a luna script
         
     def _load_luna(self):
         txt_file, _ = QFileDialog.getOpenFileName(
@@ -227,7 +249,9 @@ class AnalMixin:
                     f"Could not load {txt_file}\nException: {type(e).__name__}: {e}"
                 )
 
-
+            
+    # ------------------------------------------------------------
+    # save a luna script
 
     def _save_luna(self):
 

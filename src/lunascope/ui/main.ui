@@ -518,6 +518,13 @@
          </widget>
         </item>
         <item>
+         <widget class="QPushButton" name="butt_anal_clear">
+          <property name="text">
+           <string>Clear</string>
+          </property>
+         </widget>
+        </item>
+        <item>
          <widget class="QPushButton" name="butt_anal_exec">
           <property name="palette">
            <palette>
@@ -696,7 +703,7 @@
    <property name="minimumSize">
     <size>
      <width>118</width>
-     <height>118</height>
+     <height>139</height>
     </size>
    </property>
    <property name="windowTitle">
@@ -729,6 +736,13 @@
       <widget class="QPushButton" name="butt_sig">
        <property name="text">
         <string>Select all/none</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLineEdit" name="txt_signals">
+       <property name="placeholderText">
+        <string>(enter signals to filter)</string>
        </property>
       </widget>
      </item>
@@ -782,6 +796,13 @@
       <widget class="QPushButton" name="butt_annot">
        <property name="text">
         <string>Select all/none</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLineEdit" name="txt_annots">
+       <property name="placeholderText">
+        <string>(enter annotations to filter)</string>
        </property>
       </widget>
      </item>
@@ -1036,7 +1057,7 @@
      <x>0</x>
      <y>0</y>
      <width>1453</width>
-     <height>24</height>
+     <height>37</height>
     </rect>
    </property>
    <widget class="QMenu" name="menuView">

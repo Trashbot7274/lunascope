@@ -33,6 +33,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QDockWidget, QLabel, QFrame, QSizePolicy, QMessageBox, QLayout
 from PySide6.QtWidgets import QMainWindow, QProgressBar, QTableView, QAbstractItemView
 
+from  .helpers import clear_rows, add_dock_shortcuts
 
 from .components.slist import SListMixin
 from .components.metrics import MetricsMixin
@@ -305,8 +306,16 @@ class Controller( QMainWindow,
         if getattr(self, "anal_table_proxy", None) is not None:
             clear_rows( self.anal_table_proxy , keep_headers = False )
 
-        clear_rows( self.ui.tbl_desc_signals )
-        clear_rows( self.ui.tbl_desc_annots )
+
+        #clear_rows( self.ui.tbl_desc_signals )
+        #clear_rows( self.ui.tbl_desc_annots )
+
+        if getattr(self, "signals_table_proxy", None) is not None:
+            clear_rows( self.signals_table_proxy )
+
+        if getattr(self, "annots_table_proxy", None) is not None:
+            clear_rows( self.annots_table_proxy )
+
         clear_rows( self.ui.anal_tables ) 
         clear_rows( self.ui.tbl_soap1 )
         clear_rows( self.ui.tbl_pops1 )
@@ -319,7 +328,7 @@ class Controller( QMainWindow,
         self.ui.combo_soap.clear()
 
         self.ui.txt_out.clear()
-        self.ui.txt_inp.clear()
+        # self.ui.txt_inp.clear() 
         
         self.spectrogramcanvas.ax.cla()
         self.spectrogramcanvas.figure.canvas.draw_idle()
@@ -337,131 +346,3 @@ class Controller( QMainWindow,
         self.popshypnocanvas.figure.canvas.draw_idle()
         
 
-# ------------------------------------------------------------
-#
-# clear up tables
-#
-# ------------------------------------------------------------
-
-
-def clear_rows(target, *, keep_headers: bool = True) -> None:
-    """
-    Clear all rows. If keep_headers=False, also clear header labels.
-    `target` can be QTableView, QSortFilterProxyModel, or a plain model.
-    """
-    # Normalize to a model (and remember how to reattach if we rebuild)
-    if hasattr(target, "model"):          # QTableView
-        view = target
-        model = view.model()
-        set_model = view.setModel
-    else:                                 # model or proxy
-        view = None
-        model = target
-        set_model = None
-    if model is None:
-        return
-
-    proxy = model if isinstance(model, QSortFilterProxyModel) else None
-    src = proxy.sourceModel() if proxy else model
-    if src is None:
-        return
-
-    rc = src.rowCount()
-
-    # Fast path: QStandardItemModel
-    if isinstance(src, QStandardItemModel):
-        if rc:
-            src.removeRows(0, rc)
-        if not keep_headers:
-            cols = src.columnCount()
-            if cols:
-                src.setHorizontalHeaderLabels([""] * cols)
-        return
-
-    # Generic path: try to remove rows via API
-    ok = True
-    if rc and hasattr(src, "removeRows"):
-        try:
-            ok = bool(src.removeRows(0, rc))
-        except Exception:
-            ok = False
-    if ok:
-        if not keep_headers and hasattr(src, "setHeaderData"):
-            cols = src.columnCount()
-            for c in range(cols):
-                try:
-                    src.setHeaderData(c, QtCore.Qt.Horizontal, "")
-                except Exception:
-                    pass
-        return
-
-    # Fallback: rebuild an empty QStandardItemModel, preserving or blanking headers
-    cols = src.columnCount()
-    headers = [
-        src.headerData(c, QtCore.Qt.Horizontal, QtCore.Qt.DisplayRole)
-        for c in range(cols)
-    ]
-    new = QStandardItemModel(view or proxy)
-    new.setColumnCount(cols)
-    if keep_headers:
-        new.setHorizontalHeaderLabels([("" if h is None else str(h)) for h in headers])
-    else:
-        new.setHorizontalHeaderLabels([""] * cols)
-
-    if proxy:
-        proxy.setSourceModel(new)
-    elif set_model:
-        set_model(new)
-
-    
-        
-# ------------------------------------------------------------
-#
-# dock menu toggle
-#
-# ------------------------------------------------------------
-
-def add_dock_shortcuts(win, view_menu):
-
-    # hide/show all
-
-    act_show_all = QAction("Show/Hide All Docks", win, checkable=False)
-    act_show_all.setShortcut("Ctrl+0")
-    
-    def toggle_all():
-        docks = win.findChildren(QDockWidget)
-        all_hidden = all(not d.isVisible() for d in docks)
-        # If all hidden → show all, else hide all
-        for d in docks:
-            d.setVisible(all_hidden)
-
-    act_show_all.triggered.connect(toggle_all)
-    view_menu.addAction(act_show_all)
-
-    # control individual docks
-
-    for act in win.menuView.actions():
-        if act.text() == "(1) Project sample list":
-            act.setShortcut("Ctrl+1")
-        elif act.text() == "(2) Parameters":
-            act.setShortcut("Ctrl+2")
-        elif act.text() == "(3) Signals":
-            act.setShortcut("Ctrl+3")
-        elif act.text() == "(4) Annotations":
-            act.setShortcut("Ctrl+4")
-        elif act.text() == "(5) Instances":
-            act.setShortcut("Ctrl+5")
-        elif act.text() == "(6) Spectrograms":
-            act.setShortcut("Ctrl+6")
-        elif act.text() == "(7) Hypnograms":
-            act.setShortcut("Ctrl+7")
-        elif act.text() == "(8) Console":
-            act.setShortcut("Ctrl+8")
-        elif act.text() == "(9) Outputs":
-            act.setShortcut("Ctrl+9")
-        elif act.text() == "(/) Signal properties": 
-            act.setShortcut("Ctrl+/")
-        elif act.text() == "(-) Commands":
-            act.setShortcut("Ctrl+-")
-
-    return act_show_all

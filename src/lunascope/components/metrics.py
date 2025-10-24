@@ -65,7 +65,6 @@ class MetricsMixin:
         view.verticalHeader().setVisible(False)
                 
         # wiring
-
         self.ui.butt_sig.clicked.connect( self._toggle_sigs )
         self.ui.butt_annot.clicked.connect( self._toggle_annots )
 
@@ -135,11 +134,21 @@ class MetricsMixin:
         else:
             df = pd.DataFrame(columns=["CH", "PDIM", "SR"])
             
-        model = self.df_to_model( df )
-        self.ui.tbl_desc_signals.setModel( model )
 
-        # update view
+        # SOURCE model from your DataFrame
+        src = self.df_to_model(df)  # must return QStandardItemModel
+
+        # Filter proxy over SOURCE
+        self.signals_table_proxy = QSortFilterProxyModel(self.ui.tbl_desc_signals)
+        self.signals_table_proxy.setFilterRole(Qt.DisplayRole)
+        self.signals_table_proxy.setFilterKeyColumn(-1)  # all columns
+        self.signals_table_proxy.setSourceModel(src)
+
+        # Put proxy on the view
         view = self.ui.tbl_desc_signals
+        view.setModel(self.signals_table_proxy)
+
+        # View config
         view.setSortingEnabled(True)
         h = view.horizontalHeader()
         h.setSectionResizeMode(QHeaderView.Interactive)
@@ -151,25 +160,42 @@ class MetricsMixin:
         view.setSelectionMode(QAbstractItemView.SingleSelection)
         view.horizontalHeader().setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         view.verticalHeader().setVisible(False)
+
+        # hook a filter box 
+        self.ui.txt_signals.textChanged.connect(self.signals_table_proxy.setFilterFixedString)
+        self.signals_table_proxy.setFilterCaseSensitivity(Qt.CaseInsensitive)
         
+        # Add virtual checkbox column; channel_col_before_insert is SOURCE index of your channel column
         add_check_column(
             view,
-            channel_col_before_insert=0,
+            channel_col_before_insert=0,   # change if your "Channel" column isn't the first
             header_text="Sel",
-            initial_checked=[ ],
-            on_change=lambda _: ( self._clear_pg1(), self._update_scaling(), self._update_pg1() ) 
+            initial_checked=[],
+            on_change=lambda _: (self._clear_pg1(), self._update_scaling(), self._update_pg1()),
         )
+
 
 
 
         # --------------------------------------------------------------------------------
         # populate annotations box
 
+
+        # SOURCE model
         df = self.p.annots()
-        model = self.df_to_model( df )
-        self.ui.tbl_desc_annots.setModel( model )
-        
+        src = self.df_to_model(df)  # must be QStandardItemModel
+
+        # Filter proxy (works even if you don't filter yet)
+        self.annots_table_proxy = QSortFilterProxyModel(self.ui.tbl_desc_annots)
+        self.annots_table_proxy.setFilterRole(Qt.DisplayRole)
+        self.annots_table_proxy.setFilterKeyColumn(-1)  # all columns
+        self.annots_table_proxy.setSourceModel(src)
+
+        # View + proxy
         view = self.ui.tbl_desc_annots
+        view.setModel(self.annots_table_proxy)
+
+        # View config
         view.setSortingEnabled(True)
         h = view.horizontalHeader()
         h.setSectionResizeMode(QHeaderView.Interactive)
@@ -181,17 +207,25 @@ class MetricsMixin:
         view.setSelectionMode(QAbstractItemView.SingleSelection)
         view.horizontalHeader().setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         view.verticalHeader().setVisible(False)
-        
+
+        # hook a filter box 
+        self.ui.txt_annots.textChanged.connect(self.annots_table_proxy.setFilterFixedString)
+        self.annots_table_proxy.setFilterCaseSensitivity(Qt.CaseInsensitive)
+
+        # Add checkbox column; index is SOURCE column before insertion
         add_check_column(
             view,
-            channel_col_before_insert=0,
+            channel_col_before_insert=0,  # adjust if your key column isn't the first
             header_text="Sel",
-            initial_checked=[ ],
-            on_change= lambda anns: ( self._update_instances(anns),
-                                      self._clear_pg1(),
-                                      self._update_scaling(),
-                                      self._update_pg1() )
+            initial_checked=[],
+            on_change=lambda anns: (
+                self._update_instances(anns),
+                self._clear_pg1(),
+                self._update_scaling(),
+                self._update_pg1(),
+            ),
         )
+
         
 
 
@@ -329,7 +363,187 @@ def expand_interval(left, right, *, factor=2.0, point_width=10.0, min_left=0.0):
 
 
 
+from typing import Iterable, Optional, Callable, List
+from PySide6.QtCore import Qt, QSignalBlocker
+from PySide6.QtWidgets import QTableView, QHeaderView
+from PySide6.QtGui import QStandardItemModel, QStandardItem
+from PySide6.QtCore import QSortFilterProxyModel
+
 def add_check_column(
+    view: QTableView,
+    channel_col_before_insert: int,
+    header_text: str = "✔",
+    initial_checked: Optional[Iterable[str]] = None,
+    on_change: Optional[Callable[[List[str]], None]] = None,
+    visible_only: bool = False,  # True = affect only filtered rows
+) -> None:
+    model = view.model()
+    proxy: Optional[QSortFilterProxyModel] = None
+
+    if isinstance(model, QSortFilterProxyModel):
+        proxy = model
+        src = proxy.sourceModel()
+    else:
+        src = model
+
+    if not isinstance(src, QStandardItemModel):
+        raise TypeError("Model must be QStandardItemModel or a QSortFilterProxyModel wrapping one.")
+
+    _squelch = False
+    prev_sort = view.isSortingEnabled()
+    view.setSortingEnabled(False)
+
+    # insert checkbox col at 0 on SOURCE
+    src.insertColumn(0)
+    if header_text:
+        src.setHeaderData(0, Qt.Horizontal, header_text)
+    view.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+
+    checked = set(map(str, initial_checked or []))
+    chan_col_after = channel_col_before_insert + 1  # after insertion on SOURCE
+
+    # helpers to iterate rows and map indexes
+    def _row_range():
+        if proxy and visible_only:
+            return range(proxy.rowCount())
+        return range(src.rowCount())
+
+    def _s_index(r: int, c: int):
+        if proxy and visible_only:
+            return proxy.mapToSource(proxy.index(r, c))
+        elif proxy and not visible_only:
+            # we want ALL rows in source
+            return src.index(r, c)  # r already source row in this branch
+        else:
+            return src.index(r, c)
+
+    # populate without per-item signals
+    src.blockSignals(True)
+    try:
+        if proxy and not visible_only:
+            # iterate ALL source rows
+            for r in range(src.rowCount()):
+                it = QStandardItem()
+                it.setEditable(False)
+                it.setCheckable(True)
+                ch = str(src.data(src.index(r, chan_col_after)))
+                it.setCheckState(Qt.Checked if ch in checked else Qt.Unchecked)
+                it.setDragEnabled(True)
+                it.setDropEnabled(True)
+                src.setItem(r, 0, it)
+        else:
+            # iterate visible rows (proxy) or direct source when no proxy
+            for r in _row_range():
+                it = QStandardItem()
+                it.setEditable(False)
+                it.setCheckable(True)
+                si = _s_index(r, chan_col_after)
+                ch = str(src.data(si))
+                it.setCheckState(Qt.Checked if ch in checked else Qt.Unchecked)
+                it.setDragEnabled(True)
+                it.setDropEnabled(True)
+                src.setItem(si.row(), 0, it)
+    finally:
+        src.blockSignals(False)
+
+    # repaint column 0 via SOURCE so proxy relays it
+    def _repaint_col0():
+        if not src.rowCount():
+            return
+        tl = src.index(0, 0)
+        br = src.index(src.rowCount() - 1, 0)
+        nonlocal _squelch
+        was = _squelch
+        _squelch = True
+        try:
+            src.dataChanged.emit(tl, br, [Qt.CheckStateRole])
+        finally:
+            _squelch = was
+
+    _repaint_col0()
+
+    def _checked() -> List[str]:
+        out: List[str] = []
+        if proxy and visible_only:
+            for r in range(proxy.rowCount()):
+                si0 = _s_index(r, 0)
+                it = src.item(si0.row(), 0)
+                if it and it.checkState() == Qt.Checked:
+                    out.append(str(src.data(_s_index(r, chan_col_after))))
+        else:
+            for r in range(src.rowCount()):
+                it = src.item(r, 0)
+                if it and it.checkState() == Qt.Checked:
+                    out.append(str(src.data(src.index(r, chan_col_after))))
+        return out
+
+    setattr(view, "checked", _checked)
+
+    def _loop_set(state: Qt.CheckState, xs: Optional[Iterable[str]] = None):
+        nonlocal _squelch
+        _squelch = True
+        blocker = QSignalBlocker(src)
+        try:
+            target_set = set(map(str, xs)) if xs is not None else None
+            if proxy and visible_only:
+                rng = range(proxy.rowCount())
+                for r in rng:
+                    srow = _s_index(r, 0).row()
+                    it = src.item(srow, 0)
+                    if it is None:
+                        continue
+                    if target_set is not None:
+                        ch = str(src.data(src.index(srow, chan_col_after)))
+                        tgt = Qt.Checked if ch in target_set else Qt.Unchecked
+                        if it.checkState() != tgt:
+                            it.setCheckState(tgt)
+                    else:
+                        if it.checkState() != state:
+                            it.setCheckState(state)
+            else:
+                rng = range(src.rowCount())
+                for r in rng:
+                    it = src.item(r, 0)
+                    if it is None:
+                        continue
+                    if target_set is not None:
+                        ch = str(src.data(src.index(r, chan_col_after)))
+                        tgt = Qt.Checked if ch in target_set else Qt.Unchecked
+                        if it.checkState() != tgt:
+                            it.setCheckState(tgt)
+                    else:
+                        if it.checkState() != state:
+                            it.setCheckState(state)
+        finally:
+            del blocker
+            _squelch = False
+        _repaint_col0()
+        if on_change:
+            on_change(_checked())
+
+    setattr(view, "select_all_checks", lambda: _loop_set(Qt.Checked))
+    setattr(view, "select_none_checks", lambda: _loop_set(Qt.Unchecked))
+    setattr(view, "set", lambda xs: _loop_set(Qt.PartiallyChecked, xs))
+
+    def _on_item_changed(itm: QStandardItem):
+        if _squelch or itm.column() != 0:
+            return
+        if on_change:
+            on_change(_checked())
+
+    if not getattr(src, "_checkcol_connected", False):
+        src.itemChanged.connect(_on_item_changed)
+        setattr(src, "_checkcol_connected", True)
+
+    view.setSortingEnabled(prev_sort)
+
+
+
+
+# --------------------------------------------------------------------------------
+
+
+def OLD_add_check_column(
     view: QTableView,
     channel_col_before_insert: int,
     header_text: str = "✔",
