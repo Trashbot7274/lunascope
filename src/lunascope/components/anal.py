@@ -19,7 +19,7 @@
 #
 #  --------------------------------------------------------------------
 
-import sys, traceback
+import sys, traceback, os
 import pandas as pd
 from typing import List, Tuple
 
@@ -136,7 +136,7 @@ class AnalMixin:
 
 
     @Slot()
-    def _eval_done_ok(self):        
+    def _eval_done_ok(self):
         try:
             # output to console
             self.ui.txt_out.setPlainText( self._last_result )
@@ -147,6 +147,8 @@ class AnalMixin:
         finally:
             self._busy = False
             self._buttons( True )
+            # not potentially changed: not current
+            self._set_render_status( self.rendered , False )
             # stop progress
             self.sb_progress.setRange(0, 100); self.sb_progress.setValue(0)
             self.sb_progress.setVisible(False)
@@ -162,6 +164,7 @@ class AnalMixin:
         finally:
             self._busy = False
             self._buttons( True )
+            self._set_render_status( self.rendered , False )
             self.sb_progress.setRange(0, 100); self.sb_progress.setValue(0)
             self.sb_progress.setVisible(False)
             # turn off any prior REPORT hides
@@ -219,7 +222,6 @@ class AnalMixin:
         self._update_instances( self.curr_anns )
 
 
-
     # ------------------------------------------------------------
     # clear luna script box
 
@@ -259,21 +261,22 @@ class AnalMixin:
 
         filename, selected_filter = QFileDialog.getSaveFileName(
             self,
-            "Save Luna Script To .txt",
+            "Save Luna Script",
             "",
-            "Text Files (*.txt);;All Files (*)"
+            "Text Files (*.txt);;All Files (*)",
+            options=QFileDialog.Option.DontUseNativeDialog
         )
 
         if filename:
             # Ensure .txt extension if none was given
             if selected_filter.startswith("Text") and not filename.lower().endswith(".txt"):
                 filename += ".txt"
-
+                
             with open(filename, "w", encoding="utf-8") as f:
                 f.write(new_file)
 
 
-
+            
     # ------------------------------------------------------------
     # handle output tables
                 

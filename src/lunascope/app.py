@@ -57,8 +57,17 @@ def _load_ui():
 
 def _parse_args(argv):
     ap = argparse.ArgumentParser(prog="lunascope")
-    ap.add_argument("slist_file", nargs="?", help="optional sample list file")
-    return ap.parse_args(argv)
+    ap.add_argument("slist_file", nargs="?", metavar="FILE",
+                    help="a sample list, EDF or .annot file (optional)")
+    ap.add_argument("--param", "-p", dest="param_file", metavar="FILE",
+                    help="parameter file")
+    ap.add_argument("--cmap", "-c", dest="cmap_file", metavar="FILE",
+                    help="color map file")
+
+    # allow options to appear before/after the positional on py>=3.7
+    parse = getattr(ap, "parse_intermixed_args", ap.parse_args)
+    return parse(argv)
+
 
 
 def main(argv=None) -> int:
@@ -77,11 +86,62 @@ def main(argv=None) -> int:
     ui = _load_ui()
     controller = Controller(ui, proj)
     ui.show()
-   
+
+    # optionally, attach a file list (or .edf or .annot):
+    
     if args.slist_file:
-        folder_path = str(Path( args.slist_file ).parent) + os.sep
-        proj.var( 'path' , folder_path )
-        controller._read_slist_from_file( args.slist_file )
+
+        # EDF?
+        if args.slist_file.lower().endswith(".edf"):
+            controller.open_edf( args.slist_file )
+        # .annot file?
+        elif args.slist_file.lower().endswith(".annot"):
+            controller.open_annot( args.slist_file )
+        # otherwise, assume a sample list
+        else:
+            folder_path = str(Path( args.slist_file ).parent) + os.sep
+            proj.var( 'path' , folder_path )
+            controller._read_slist_from_file( args.slist_file )        
+
+    # optionally, pre-load a parameter file?
+    if args.param_file:
+        try:
+            text = open( args.param_file , "r", encoding="utf-8").read()
+            controller.ui.txt_param.setPlainText(text)
+        except (UnicodeDecodeError, OSError) as e:
+            print(f"[Error] Could not load {args.param_file}: {type(e).__name__}: {e}", file=sys.stderr)
+
+    # optionally pre-load a color map
+    if args.cmap_file:
+        try:
+            text = open( args.cmap_file , "r", encoding="utf-8").read()            
+            controller.cmap = {}
+            controller.cmap_list = [ ] 
+            for line in text.splitlines():
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                parts = line.replace("=", " ").replace("\t", " ").split()
+                if len(parts) >= 2:
+                    controller.cmap[parts[0]] = parts[1]
+                    controller.cmap_list.append( parts[0] )
+            controller.cmap_list.reverse()
+            controller.palset = 'bespoke'
+
+        except (UnicodeDecodeError, OSError) as e:
+            print(f"[Error] Could not load {args.cmap_file}: {type(e).__name__}: {e}", file=sys.stderr)
+
+                
+
+
+                
+
+            
+
+    #
+    # run the app
+    #
+    
     try:
         return app.exec()
     except Exception:
@@ -89,6 +149,8 @@ def main(argv=None) -> int:
         traceback.print_exc()
         return 1
 
+
+    
 
 if __name__ == "__main__":
     raise SystemExit(main())

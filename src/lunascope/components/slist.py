@@ -40,8 +40,8 @@ class SListMixin:
         # wire buttons
         self.ui.butt_load_slist.clicked.connect(self.open_file)
         self.ui.butt_build_slist.clicked.connect(self.open_folder)
-        self.ui.butt_load_edf.clicked.connect(self.open_edf)
-        self.ui.butt_load_annot.clicked.connect(self.open_annot)
+        self.ui.butt_load_edf.clicked.connect(lambda _checked=False: self.open_edf())        
+        self.ui.butt_load_annot.clicked.connect(lambda _checked=False: self.open_annot())
         self.ui.butt_refresh.clicked.connect(self._refresh)
         
         # filter SL
@@ -151,15 +151,17 @@ class SListMixin:
     # Load EDF from a file
     # ------------------------------------------------------------
         
-    def open_edf(self):
-
-        edf_file , _ = QFileDialog.getOpenFileName(
-            self.ui,
-            "Open EDF file",
-            "",
-            "EDF (*.edf *.rec);;All Files (*)",
-            options=QFileDialog.Option.DontUseNativeDialog
-        )
+    def open_edf(self , edf_file = None ):
+        
+        
+        if edf_file is None:
+            edf_file , _ = QFileDialog.getOpenFileName(
+                self.ui,
+                "Open EDF file",
+                "",
+                "EDF (*.edf *.rec);;All Files (*)",
+                options=QFileDialog.Option.DontUseNativeDialog
+            )
 
         # update
         if edf_file != "":
@@ -226,15 +228,16 @@ class SListMixin:
     # ------------------------------------------------------------
     # Load .annot from a file
         
-    def open_annot(self):
+    def open_annot(self,  annot_file = None ):
 
-        annot_file , _ = QFileDialog.getOpenFileName(
-            self.ui,
-            "Open annotation file",
-            "",
-            "EDF (*.annot *.eannot *.xml *.tsv *.txt);;All Files (*)",
+        if annot_file is None:
+            annot_file , _ = QFileDialog.getOpenFileName(
+                self.ui,
+                "Open annotation file",
+                "",
+                "EDF (*.annot *.eannot *.xml *.tsv *.txt);;All Files (*)",
             options=QFileDialog.Option.DontUseNativeDialog
-        )
+            )
 
         # update
         if annot_file != "":

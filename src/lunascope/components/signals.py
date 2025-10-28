@@ -73,17 +73,6 @@ class SignalsMixin:
         pi.disableAutoRange()
         pi.hideButtons()          # use this, not pi.autoBtn.hide()
         
-        # cols
-        self.stgcols_hex = {
-            'N1': '#20B2DA',  # rgba(32,178,218,1)
-            'N2': '#0000FF',  # blue
-            'N3': '#000080',  # navy
-            'R':  '#FF0000',  # red
-            'W':  '#008000',  # green (CSS "green")
-            '?':  '#808080',  # gray
-            'L':  '#FFFF00',  # yellow
-        }
-
 
         self.ui.spin_spacing.valueChanged.connect( self._update_scaling )
         self.ui.spin_scale.valueChanged.connect( self._update_scaling )
@@ -268,7 +257,7 @@ class SignalsMixin:
     # --------------------------------------------------------------------------------
 
     def _update_hypnogram(self):
-
+        
         # writes on the same canvas as the hypnogram above, but only updates the
         # stuff that may change
 
@@ -393,13 +382,17 @@ class SignalsMixin:
         self.ss_chs = self.ui.tbl_desc_signals.checked()
         self.ss_anns = self.ui.tbl_desc_annots.checked()
 
+        # set palette
+        self.set_palette()
+        
         # for a given EDF instance, take selected channels 
         if len( self.ss_chs ) + len( self.ss_anns ) == 0:
-            self.rendered = False
+            self._set_render_status( False , False )
             return
 
         # we're now going to have something to plot
-        self.rendered = True
+        #   rendered and current
+        self._set_render_status( True , True)
 
         # ------------------------------------------------------------
         # do rendering on a separate thread
@@ -425,7 +418,6 @@ class SignalsMixin:
             try:
                 exc = _f.exception()
                 if exc is None:
-                    print( 'all good' ) 
                     # self._last_result = _f.result()  # nothing returned
                     QMetaObject.invokeMethod(self, "_segsrv_done_ok", Qt.QueuedConnection)
                 else:
@@ -473,11 +465,11 @@ class SignalsMixin:
         self._initiate_curves()        
         
         # plot segments
-        num_epochs = self.ss.num_epochs()
-        tscale = self.ss.get_time_scale()
-        tstarts = [ tscale[idx] for idx in range(0,len(tscale),2)]
-        tstops = [ tscale[idx] for idx in range(1,len(tscale),2)]
-        times = np.concatenate((tstarts, tstops), axis=1)
+#        num_epochs = self.ss.num_epochs()
+#        tscale = self.ss.get_time_scale()
+#        tstarts = [ tscale[idx] for idx in range(0,len(tscale),2)]
+#        tstops = [ tscale[idx] for idx in range(1,len(tscale),2)]
+#        times = np.concatenate((tstarts, tstops), axis=1)
 
         # ready to view
         self.ss.window(0,30)        
@@ -525,19 +517,22 @@ class SignalsMixin:
         # update hypnogram and segment plot
         self._update_hypnogram()
 
-        # get all channels
-        self.ss_chs = self.p.edf.channels()
-        self.ss_anns = self.p.edf.annots()
+        # get all checked channels
+        self.ss_chs = self.ui.tbl_desc_signals.checked()
+        self.ss_anns = self.ui.tbl_desc_annots.checked()
 
+        # set palette
+        self.set_palette()
+        
         #
         # plot segments
         #
 
-        num_epochs = self.ssa.num_epochs()
-        tscale = self.ssa.get_time_scale()
-        tstarts = [ tscale[idx] for idx in range(0,len(tscale),2)]
-        tstops = [ tscale[idx] for idx in range(1,len(tscale),2)]
-        times = np.concatenate((tstarts, tstops), axis=1)
+#        num_epochs = self.ssa.num_epochs()
+#        tscale = self.ssa.get_time_scale()
+#        tstarts = [ tscale[idx] for idx in range(0,len(tscale),2)]
+#        tstops = [ tscale[idx] for idx in range(1,len(tscale),2)]
+#        times = np.concatenate((tstarts, tstops), axis=1)
 
         # initiate curves etc 
 
@@ -569,13 +564,14 @@ class SignalsMixin:
         for curve in self.curves:
             pi.removeItem(curve)
         self.curves.clear()
+        
+        # get all checked channels
+        self.ss_chs = self.ui.tbl_desc_signals.checked()
 
         nchan = len( self.ss_chs )
-        colors = [pg.intColor(i, hues=nchan) for i in range(nchan)]
-
         
         for i in range(nchan):
-            pen = pg.mkPen( colors[i], width=1, cosmetic=True)
+            pen = pg.mkPen( self.colors[i], width=1, cosmetic=True)
             c = pg.PlotCurveItem(pen=pen, connect='finite')
             pi.addItem(c)
             self.curves.append(c)
@@ -586,13 +582,14 @@ class SignalsMixin:
 
         self.annot_mgr = TrackManager( self.ui.pg1 )
 
+        # get all checked annots
+        self.ss_anns = self.ui.tbl_desc_annots.checked()
+
         nann = len( self.ss_anns )
-        colors = [pg.intColor(i, hues=nann) for i in range(nann)]
         self.annot_curves = []
 
         for i in range(nann):
-            col = colors[i]
-            col = self.stgcols_hex.get(self.ss_anns[i] , col)
+            col = self.acolors[i]
             self.annot_mgr.update_track( self.ss_anns[i] , [] , [], [], [] , color = col )
             pen = pg.mkPen( col, width=1, cosmetic=True)
             c = pg.PlotCurveItem(pen=pen, connect='finite')
@@ -709,8 +706,6 @@ class SignalsMixin:
         else:
             yannot = 1 - self.pg1_footer_height - self.pg1_header_height 
 
-#        print('ns',ns,'na',na,'yannot', yannot )
-
         # update scaling (either for ss or ssa in simple rendering)
 
         if self.rendered is True:
@@ -725,7 +720,6 @@ class SignalsMixin:
                                   self.pg1_footer_height ,
                                   yannot ,
                                   self.clip_signals )
-
 
 
         # update main plot (passes to _update_pg1_simple() as needed)
@@ -754,6 +748,8 @@ class SignalsMixin:
             pi.removeItem(curve)
         self.annot_curves.clear()
 
+        self.set_palette()
+        
         self._initiate_curves()
         
     
@@ -776,7 +772,7 @@ class SignalsMixin:
         # annots
         anns = self.ui.tbl_desc_annots.checked()
         anns = [x for x in self.ss_anns if x in anns ]
-        
+            
         # window (sec)
         x1 = self.ss.get_window_left()
         x2 = self.ss.get_window_right()
@@ -785,6 +781,14 @@ class SignalsMixin:
         pw = self.ui.pg1
         vb = pw.getPlotItem().getViewBox()
         vb.setRange(xRange=(x1,x2), padding=0, update=False)  # no immediate paint
+
+        # ch-ordering? (based on index
+        index = list(range(len(chs)))
+        if self.cmap_list:
+            index = sorted( 
+                index , 
+                key = lambda i: (self.cmap_list.index(chs[i]) if chs[i] in self.cmap_list else len(self.cmap_list) + i)
+                )
         
         # channels
         idx = 0        
@@ -794,7 +798,7 @@ class SignalsMixin:
         for ch in chs:
             # signals
             x = self.ss.get_timetrack( ch )
-            y = self.ss.get_scaled_signal( ch , idx )            
+            y = self.ss.get_scaled_signal( ch , index[ idx ] )            
             self.curves[idx].setData(x, y)            
             # labels            
             ylim = self.ss.get_window_phys_range( ch )
@@ -899,8 +903,11 @@ class SignalsMixin:
             h = h / len(chs) 
         else:
             h = 0
-      
-        
+
+        # re-order channels?
+        if self.cmap_list:
+            chs = sorted( chs, key=lambda x: (self.cmap_list.index(x) if x in self.cmap_list else len(self.cmap_list) + chs.index(x)))
+            
         # channels
         idx = 0        
         tv = [ '' ] * ( len(chs) + len(anns) )
@@ -909,6 +916,10 @@ class SignalsMixin:
         for ch in chs:
             # signals
             d = self.p.slice( self.p.s2i( [ ( x1 , x2 ) ] ) , chs = ch , time = True )[1]
+            # no data, e.g. in gap?
+            if len(d) == 0:
+                idx = idx + 1
+                continue
             x = d[:,0]  # time-track
             y = d[:,1]  # unscaled signal
             # need to scale manually: to 0/1
@@ -931,31 +942,35 @@ class SignalsMixin:
         # annots (from ssa)
         aidx = 0
         self.ssa.compile_windowed_annots( anns )
-        anns1 = [self.ssa_anns_lookup[v] for v in anns ]
-
-#        print( 'len(anns)' , len(anns) )
-#        print( 'len(anns1)' , len(anns1) )
+#        anns1 = [self.ssa_anns_lookup[v] for v in anns ]
         
         for ann in anns:
-            print('ann',ann,idx,aidx,anns1[aidx] )
+            # get events
             a0 = self.ssa.get_annots_xaxes( ann )            
+
+            # nothing to do?
             if len(a0) == 0:
                 idx = idx + 1
                 aidx = aidx + 1
                 continue
 
+            # pull
             a1 = self.ssa.get_annots_xaxes_ends( ann )
             y0 = self.ssa.get_annots_yaxes( ann )
             y1 = self.ssa.get_annots_yaxes_ends( ann )
-            self.annot_curves[ anns1[aidx] ].setData( [ x1 , x2 ] , [ ( y0[0] + y1[0] ) / 2  , ( y0[0] + y1[0] ) / 2 ] ) 
-#            self.annot_mgr.toggle( ann , True )
+
+            # draw
+            self.annot_curves[ aidx ].setData( [ x1 , x2 ] , [ ( y0[0] + y1[0] ) / 2  , ( y0[0] + y1[0] ) / 2 ] ) 
+
+            #            self.annot_mgr.toggle( ann , True )
             a0, a1 = _ensure_min_px_width( vb, a0, a1, px=1)  # 1-px minimum
             self.annot_mgr.update_track( ann , x0 = a0 , x1 = a1 , y0 = y0 , y1 = y1 )
+
             # labels
             yv[idx] = ( y0[0] * 2 + y1[0]  ) / 3.0 
-
             if self.show_labels: tv[idx] = ann
 
+            # next annot
             idx = idx + 1
             aidx = aidx + 1
 
@@ -1026,6 +1041,7 @@ class XRangeSelector(QtCore.QObject):
         self.bounds      = tuple(bounds) if bounds is not None else None
         self.click_span  = float(click_span)
         self.min_span    = max(0.0, float(min_span))
+        self.step2       = 8
         self.step, self.big_step = float(step), float(big_step)
         self.step_px, self.big_step_px = int(step_px), int(big_step_px)
         self.drag_thresh_px = int(drag_thresh_px)
@@ -1097,16 +1113,29 @@ class XRangeSelector(QtCore.QObject):
         sc(QtCore.Qt.Key_Right, lambda: self._nudge(self._step(False)*+1))
         sc(QtCore.Qt.SHIFT | QtCore.Qt.Key_Left,  lambda: self._nudge(self._step(True)*-1))
         sc(QtCore.Qt.SHIFT | QtCore.Qt.Key_Right, lambda: self._nudge(self._step(True)*+1))
+        sc(QtCore.Qt.CTRL | QtCore.Qt.Key_Left,  lambda: self._nudge(self._step2()*-1))
+        sc(QtCore.Qt.CTRL | QtCore.Qt.Key_Right, lambda: self._nudge(self._step2()*+1))
         sc(QtCore.Qt.Key_Up,    lambda: self._zoom(0.8))
         sc(QtCore.Qt.Key_Down,  lambda: self._zoom(1.25))
 
     def _step(self, big: bool):
         if self.integer:
+            # 30 or 300 if standard window, but if view is smaller, scale down
+            self._ensure_region_visible()
+            lo, hi = self.region.getRegion()
+            wd = hi - lo
+            if wd < 30: return wd/2
             return self.big_step if big else self.step
         px = self.big_step_px if big else self.step_px
         (xmin, xmax), w = self.vb.viewRange()[0], max(1.0, float(self.vb.width() or 1))
         return (xmax - xmin) * (float(px) / w)
 
+    def _step2(self):
+        self._ensure_region_visible()
+        lo, hi = self.region.getRegion()
+        wd = hi - lo
+        return (hi-lo)/self.step2
+    
     # ---------- helpers ----------
     def _snap(self, x): return int(round(x)) if self.integer else float(x)
 
@@ -1287,8 +1316,6 @@ class XRangeSelector(QtCore.QObject):
                 # scene-space hit test for robustness
                 r = self.region.mapRectToScene(self.region.boundingRect())
                 inside = r.contains(ev.scenePos())
-                print('set')
-            print ('inside',inside)
             
             if inside:
                 # shrink to one epoch centered at click
@@ -1406,7 +1433,7 @@ class XRangeSelector(QtCore.QObject):
         self._schedule_emit(*self._enforce_span_limits(lo, hi))
 
     def _nudge(self, dx):
-        self._ensure_region_visible()
+        self._ensure_region_visible()        
         lo, hi = self.region.getRegion()
         lo, hi = self._clamp_pair(self._snap(lo)+dx, self._snap(hi)+dx)
         self._set_region_silent(lo, hi)
@@ -1454,7 +1481,6 @@ class XRangeSelector(QtCore.QObject):
         self.wid.setFocus()
         if emit:
             self._schedule_emit(lo, hi)
-
 
 
 # --------------------------------------------------------------------------------

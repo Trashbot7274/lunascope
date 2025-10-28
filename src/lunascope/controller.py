@@ -32,8 +32,11 @@ from PySide6.QtGui import QAction, QStandardItemModel
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QDockWidget, QLabel, QFrame, QSizePolicy, QMessageBox, QLayout
 from PySide6.QtWidgets import QMainWindow, QProgressBar, QTableView, QAbstractItemView
+from PySide6.QtWidgets import QFileDialog
 
-from  .helpers import clear_rows, add_dock_shortcuts
+import pyqtgraph as pg
+
+from  .helpers import clear_rows, add_dock_shortcuts, pick_two_colors, override_colors, random_darkbg_colors
 
 from .components.slist import SListMixin
 from .components.metrics import MetricsMixin
@@ -41,6 +44,7 @@ from .components.hypno import HypnoMixin
 from .components.anal import AnalMixin
 from .components.signals import SignalsMixin
 from .components.settings import SettingsMixin
+from .components.masks import MasksMixin
 from .components.ctree import CTreeMixin
 from .components.spectrogram import SpecMixin
 from .components.soappops import SoapPopsMixin
@@ -55,7 +59,7 @@ class Controller( QMainWindow,
                   HypnoMixin , SoapPopsMixin, 
                   AnalMixin , SignalsMixin, 
                   SettingsMixin, CTreeMixin ,
-                  SpecMixin ):
+                  SpecMixin , MasksMixin ):
 
     def __init__(self, ui, proj):
         super().__init__()
@@ -70,6 +74,9 @@ class Controller( QMainWindow,
         self._exec = ThreadPoolExecutor(max_workers=1)
         self._busy = False
 
+        # setups
+        self._init_colors()
+        
         # initiate each component
         self._init_slist()
         self._init_metrics()
@@ -80,7 +87,8 @@ class Controller( QMainWindow,
         self._init_ctree()
         self._init_spec()
         self._init_soap_pops()
-
+        self._init_masks()
+        
         # for the tables added above, ensure all are read-only
         for v in self.ui.findChildren(QTableView):
             v.setEditTriggers(QAbstractItemView.NoEditTriggers)
@@ -112,13 +120,13 @@ class Controller( QMainWindow,
         self.ui.menuView.addAction(self.ui.dock_settings.toggleViewAction())
         self.ui.menuView.addSeparator()
         self.ui.menuView.addAction(self.ui.dock_sig.toggleViewAction())
-        self.ui.menuView.addAction(self.ui.dock_sigprop.toggleViewAction())
         self.ui.menuView.addAction(self.ui.dock_annot.toggleViewAction())
         self.ui.menuView.addAction(self.ui.dock_annots.toggleViewAction())
         self.ui.menuView.addSeparator()
         self.ui.menuView.addAction(self.ui.dock_spectrogram.toggleViewAction())
         self.ui.menuView.addAction(self.ui.dock_hypno.toggleViewAction())
         self.ui.menuView.addSeparator()
+        self.ui.menuView.addAction(self.ui.dock_mask.toggleViewAction())
         self.ui.menuView.addAction(self.ui.dock_console.toggleViewAction())
         self.ui.menuView.addAction(self.ui.dock_outputs.toggleViewAction())
         self.ui.menuView.addSeparator()
@@ -151,6 +159,37 @@ class Controller( QMainWindow,
             )()
         )
 
+        # palette menu
+        act_pal_spectrum = QAction("Spectrum", self)
+        act_pal_white    = QAction("White", self)
+        act_pal_muted    = QAction("Muted", self)
+        act_pal_black    = QAction("Black", self)
+        act_pal_random   = QAction("Random", self)
+        act_pal_load     = QAction("Bespoke (load)", self)
+        act_pal_bespoke  = QAction("Bespoke (apply)", self)
+        act_pal_user     = QAction("Pick", self)
+
+        act_pal_spectrum.triggered.connect(self._set_spectrum_palette)
+        act_pal_white.triggered.connect(self._set_white_palette)
+        act_pal_muted.triggered.connect(self._set_muted_palette)
+        act_pal_black.triggered.connect(self._set_black_palette)
+        act_pal_random.triggered.connect(self._set_random_palette)
+        act_pal_load.triggered.connect(self._load_palette)
+        act_pal_load.triggered.connect(self._set_bespoke_palette)
+        act_pal_user.triggered.connect(self._user_palette)
+        
+        self.ui.menuPalettes.addAction(act_pal_spectrum)
+        self.ui.menuPalettes.addAction(act_pal_white)
+        self.ui.menuPalettes.addAction(act_pal_muted)
+        self.ui.menuPalettes.addAction(act_pal_black)
+        self.ui.menuPalettes.addAction(act_pal_random)
+        self.ui.menuPalettes.addSeparator()
+        self.ui.menuPalettes.addAction(act_pal_user)
+        self.ui.menuPalettes.addSeparator()
+        self.ui.menuPalettes.addAction(act_pal_load)
+        self.ui.menuPalettes.addAction(act_pal_bespoke)
+        
+        # about menu
         self.ui.menuAbout.addAction(act_about)   
 
         # window title
@@ -163,8 +202,8 @@ class Controller( QMainWindow,
         self.ui.dock_help.hide()
         self.ui.dock_console.hide()
         self.ui.dock_outputs.hide()
-        self.ui.dock_sigprop.hide()
-
+        self.ui.dock_mask.hide()
+        
         # arrange docks: lock and resize
         self.ui.setCorner(Qt.TopRightCorner,    Qt.RightDockWidgetArea)
         self.ui.setCorner(Qt.BottomRightCorner, Qt.RightDockWidgetArea)
@@ -172,8 +211,8 @@ class Controller( QMainWindow,
         # arrange docks: lower docks (console/output)
         w = self.ui.width()
 
-        self.ui.resizeDocks([ self.ui.dock_console , self.ui.dock_outputs ],
-                            [int(w*0.6), int(w*0.45)], Qt.Horizontal)
+        self.ui.resizeDocks([ self.ui.dock_mask, self.ui.dock_console , self.ui.dock_outputs ],
+                            [ int(w*0.1), int(w*0.5), int(w*0.4)], Qt.Horizontal)
 
         # arrange docks: left docks (samples, settings)
         self.ui.resizeDocks([ self.ui.dock_slist , self.ui.dock_settings ],
@@ -183,7 +222,7 @@ class Controller( QMainWindow,
         # arrange docks: right docks (signals, annots, events)
         h = self.ui.height()
         self.ui.resizeDocks([ self.ui.dock_sig, self.ui.dock_annot, self.ui.dock_annots ] , 
-                            [int(h*0.5), int(h*0.4), int(h*0.1) ],
+                            [  int(h*0.4), int(h*0.3), int(h*0.1) ],
                             Qt.Vertical)
         w_right = 320
         self.ui.resizeDocks([self.ui.dock_slist, self.ui.dock_sig], [self.width()-w_right, w_right], Qt.Horizontal)
@@ -275,6 +314,10 @@ class Controller( QMainWindow,
             )
             return
             
+        # initiate graphs
+        self.curves = [ ]
+        self.annot_curves = [ ] 
+
         # and update things that need updating
         self._update_metrics()
         self._render_hypnogram()
@@ -282,11 +325,11 @@ class Controller( QMainWindow,
         self._update_soap_list()
         self._update_params()
 
-        # initially, no signals rendered
-        self.rendered = False
+        
+        # initially, no signals rendered / not rendered / not current
+        self._set_render_status( False , False )
 
         # draw
-        self.curves = [ ] 
         self._render_signals_simple()
 
         # hypnogram + stats if available
@@ -344,5 +387,197 @@ class Controller( QMainWindow,
             
         self.popshypnocanvas.ax.cla()
         self.popshypnocanvas.figure.canvas.draw_idle()
+
+
+
+    #
+    # helper to handle render button
+    #
+
+
+    def _set_render_status(self, rendered , current ):
+        # three modes:
+        #   initial (pg1_simple)     not rendered (ignore changed) --> red
+        #   post render              render and not changed        --> green
+        #   post render, post Exec   render and changed            --> amber
         
+        self.rendered = rendered
+        self.current  = current
+
+        if self.rendered:
+            if self.current:
+                self.ui.butt_render.setStyleSheet("background-color: #2E8B57; color: #FFFFFF;")
+            else:
+                self.ui.butt_render.setStyleSheet("background-color: #FFC107; color: #5C0000;")
+        else:
+            self.ui.butt_render.setStyleSheet("background-color: #F8F8F8; color: #8B0000;")
+
+            
+    #
+    # handle palettes
+    #
+
+    def _init_colors(self):
+
+        self.cmap = {}
+
+        self.cmap_list = [ ] 
+
+        self.stgcols_hex = {
+            'N1': '#20B2DA',  # rgba(32,178,218,1)
+            'N2': '#0000FF',  # blue
+            'N3': '#000080',  # navy
+            'R':  '#FF0000',  # red
+            'W':  '#008000',  # green (CSS "green")
+            '?':  '#808080',  # gray
+            'L':  '#FFFF00',  # yellow
+        }
+
+        
+    def _set_default_palette(self):        
+        if not hasattr(self, 'palset'):
+            self._set_spectrum_palette()
+            self.palset = 'spectrum'
+
+
+    def set_palette(self):
+        if not hasattr(self, 'palset'):
+            self._set_default_palette()
+        if self.palset == 'spectrum': self._set_spectrum_palette()
+        if self.palset == 'white': self._set_white_palette()
+        if self.palset == 'black': self._set_black_palette()
+        if self.palset == 'muted': self._set_muted_palette()
+        if self.palset == 'random': self._set_random_palette()
+        if self.palset == 'bespoke': self._set_bespoke_palette()
+        if self.palset == 'user': self._set_user_palette()
+            
+    def _set_spectrum_palette(self):
+        self.palset = 'spectrum'
+        self.ui.pg1.setBackground('black')        
+        nchan = len( self.ui.tbl_desc_signals.checked() )
+        self.colors = [pg.intColor(i, hues=nchan) for i in range(nchan)]
+        anns = self.ui.tbl_desc_annots.checked()
+        nanns = len( anns )
+        self.acolors = [pg.intColor(i, hues=nanns) for i in range(nanns)]
+        self.acolors = self._update_stage_cols( self.acolors , anns )
+        self._update_cols()
+        
+    def _set_white_palette(self):        
+        self.palset = 'white'
+        self.ui.pg1.setBackground('#E0E0E0')
+        nchan = len( self.ui.tbl_desc_signals.checked() )      
+        self.colors = ['#101010'] * nchan
+        anns = self.ui.tbl_desc_annots.checked()
+        nanns = len( anns )
+        self.acolors = ['#101010'] * nanns
+        self.acolors = self._update_stage_cols( self.acolors , anns )
+        self._update_cols()
+
+    def _set_muted_palette(self):
+        self.palset = 'muted'
+        self.ui.pg1.setBackground('#E0E0E0')
+        nchan = len( self.ui.tbl_desc_signals.checked() )
+        self.colors = ['#101010'] * nchan
+        anns = self.ui.tbl_desc_annots.checked()
+        nanns = len( anns )
+        self.acolors = ['#101010'] * nanns
+        self.acolors = self._update_stage_cols( self.acolors , anns )
+        self._update_cols()
+
+    def _set_black_palette(self):
+        self.palset = 'black'
+        self.ui.pg1.setBackground('#101010')
+        nchan = len( self.ui.tbl_desc_signals.checked() )
+        self.colors = ['#E0E0E0'] * nchan
+        anns = self.ui.tbl_desc_annots.checked()
+        nanns = len( anns )
+        self.acolors = ['#E0E0E0'] * nanns
+        self.acolors = self._update_stage_cols( self.acolors , anns )
+        self._update_cols()
+        
+    def _set_random_palette(self):
+        self.palset = 'random'
+        self.ui.pg1.setBackground('#101010')
+        nchan = len( self.ui.tbl_desc_signals.checked() )
+        self.colors = random_darkbg_colors( nchan )
+        anns = self.ui.tbl_desc_annots.checked()
+        nanns = len( anns )
+        self.acolors = random_darkbg_colors( nanns )
+        self.acolors = self._update_stage_cols( self.acolors , anns )
+        self._update_cols()
+
+    def _set_bespoke_palette(self):        
+        # back default black (i.e. for things not seen)
+        self._set_black_palette()
+        self.palset = 'bespoke'
+        chs = self.ui.tbl_desc_signals.checked()
+        nchan = len( chs )
+        # set signal colors
+        self.colors = override_colors(self.colors, chs, self.cmap)
+        # and annots
+        anns = self.ui.tbl_desc_annots.checked()
+        self.acolors = override_colors(self.acolors, anns, self.cmap)
+        self.acolors = self._update_stage_cols( self.acolors , self.ss_anns )
+        self._update_cols()
+
+
+    def _update_stage_cols(self,pal,anns):
+        return [self.stgcols_hex.get(a_i, p_i) for a_i, p_i in zip(anns, pal)]
+
+    
+    def _load_palette(self):
+        txt_file, _ = QFileDialog.getOpenFileName(
+            self.ui,
+            "Open color map",
+            "",
+            "Text (*.txt);;All Files (*)",
+            options=QFileDialog.Option.DontUseNativeDialog
+        )
+
+        if txt_file:
+            try:
+                text = open(txt_file, "r", encoding="utf-8").read()
+                
+                self.cmap = {}
+                self.cmap_list = [ ] 
+                for line in text.splitlines():
+                    line = line.strip()
+                    if not line or line.startswith("#"):
+                        continue
+                    parts = line.replace("=", " ").replace("\t", " ").split()
+                    if len(parts) >= 2:
+                        self.cmap[parts[0]] = parts[1]
+                        self.cmap_list.append( parts[0] )
+
+                # reverse order (for plotting goes y 0 - 1 is bottom - top currently
+                # and can't be bothered to fix
+                self.cmap_list.reverse()
+                
+                # and set them
+                self._set_bespoke_palette()
+                
+            except (UnicodeDecodeError, OSError) as e:
+                QMessageBox.critical(
+                    None,
+                    "Error opening color map",
+                    f"Could not load {txt_file}\nException: {type(e).__name__}: {e}"
+                )
+            
+    def _update_cols(self):
+        for c, col in zip(self.curves, self.colors):
+            c.setPen(pg.mkPen(col, width=1, cosmetic=True))
+        for c, col in zip(self.annot_curves, self.acolors):
+            c.setPen(pg.mkPen(col, width=1, cosmetic=True))
+
+        
+    def _user_palette(self):
+        self.palset = 'user'
+        self.c1, self.c2 = pick_two_colors()
+        self.ui.pg1.setBackground(self.c1)
+        nchan = len( self.ss_chs )
+        self.colors = [self.c2] * nchan
+        nanns = len( self.ss_anns )
+        self.acolors = [self.c2] * nchan
+        self.acolors = self._update_stage_cols( self.acolors , self.ss_anns )
+
 

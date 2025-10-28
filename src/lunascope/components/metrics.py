@@ -25,17 +25,17 @@ import lunapi as lp
 
 from typing import Callable, Iterable, List, Optional
 
-from PySide6.QtWidgets import QHeaderView, QAbstractItemView, QTableView
+from PySide6.QtWidgets import QHeaderView, QAbstractItemView, QTableView, QMessageBox
 from PySide6.QtGui import QStandardItemModel, QStandardItem, QColor
 from PySide6.QtCore import Qt, QSortFilterProxyModel, QRegularExpression, QModelIndex, QSignalBlocker
+
+from ..helpers import sort_df_by_list
 
 class MetricsMixin:
 
     def _init_metrics(self):
-
         
         # signal table
-
         view = self.ui.tbl_desc_signals
         view.setSortingEnabled(True)
         h = view.horizontalHeader()
@@ -85,7 +85,12 @@ class MetricsMixin:
             self.ui.tbl_desc_annots.select_none_checks()
         self._update_pg1()
 
+        
+    def all_labels(self,view):
+        m = view.model()
+        return [m.data(m.index(r, 0)) for r in range(m.rowCount())]
 
+        
     # ------------------------------------------------------------
     # Attach EDF
 
@@ -95,6 +100,15 @@ class MetricsMixin:
         # EDF header metrics --> status bar
         
         self.p.silent_proc( 'HEADERS & EPOCH align' )
+
+        df = self.p.table( 'EPOCH' )
+        try:
+            edf_ne = df.iloc[0, df.columns.get_loc('NE')]
+        except KeyError:
+            QMessageBox.critical(self, "Problem", "Likely no unmasked epochs left\nGoing to refresh the EDF" )
+            self._refresh()
+            return        
+        
         df = self.p.table( 'HEADERS' )
         edf_id = self.p.id()
         rec_dur_hms = df.iloc[0, df.columns.get_loc('REC_DUR_HMS')]
@@ -104,8 +118,7 @@ class MetricsMixin:
         edf_ns = df.iloc[0, df.columns.get_loc('NS')]
         edf_starttime = df.iloc[0, df.columns.get_loc('START_TIME')]
         edf_startdate = df.iloc[0, df.columns.get_loc('START_DATE')]
-        df = self.p.table( 'EPOCH' )
-        edf_ne = df.iloc[0, df.columns.get_loc('NE')]
+
 
         self.sb_id.setText( f"{edf_type}: {edf_id}" )
         self.sb_start.setText( f"Start time: {edf_starttime} date: {edf_startdate}" )
@@ -133,11 +146,15 @@ class MetricsMixin:
             df = df[ [ 'CH' , 'PDIM' , 'SR' ] ]
         else:
             df = pd.DataFrame(columns=["CH", "PDIM", "SR"])
-            
 
+        # re-order channels based on a cmap?
+        if self.cmap_list:
+            df = sort_df_by_list( df , 0 , list(reversed(self.cmap_list)) )
+            
         # SOURCE model from your DataFrame
         src = self.df_to_model(df)  # must return QStandardItemModel
 
+               
         # Filter proxy over SOURCE
         self.signals_table_proxy = QSortFilterProxyModel(self.ui.tbl_desc_signals)
         self.signals_table_proxy.setFilterRole(Qt.DisplayRole)
@@ -149,7 +166,7 @@ class MetricsMixin:
         view.setModel(self.signals_table_proxy)
 
         # View config
-        view.setSortingEnabled(True)
+        view.setSortingEnabled(False)
         h = view.horizontalHeader()
         h.setSectionResizeMode(QHeaderView.Interactive)
         h.setStretchLastSection(False)
@@ -175,14 +192,17 @@ class MetricsMixin:
         )
 
 
-
-
         # --------------------------------------------------------------------------------
         # populate annotations box
 
 
         # SOURCE model
         df = self.p.annots()
+
+        # re-order channels based on a cmap?                                                                                             
+        if self.cmap_list:
+            df = sort_df_by_list( df , 0 , list(reversed(self.cmap_list)) )
+        
         src = self.df_to_model(df)  # must be QStandardItemModel
 
         # Filter proxy (works even if you don't filter yet)
@@ -196,7 +216,7 @@ class MetricsMixin:
         view.setModel(self.annots_table_proxy)
 
         # View config
-        view.setSortingEnabled(True)
+        view.setSortingEnabled(False)
         h = view.horizontalHeader()
         h.setSectionResizeMode(QHeaderView.Interactive)
         h.setStretchLastSection(True)
@@ -215,42 +235,47 @@ class MetricsMixin:
         # Add checkbox column; index is SOURCE column before insertion
         add_check_column(
             view,
-            channel_col_before_insert=0,  # adjust if your key column isn't the first
+            channel_col_before_insert=0,  
             header_text="Sel",
             initial_checked=[],
             on_change=lambda anns: (
                 self._update_instances(anns),
                 self._clear_pg1(),
                 self._update_scaling(),
-                self._update_pg1(),
+                self._update_pg1()
             ),
         )
-
         
-
-
         # --------------------------------------------------------------------------------
-        # redo original populatio of ssa
+        # redo original population of ssa
 
-        # track all original annots
+        # track all original annots (to keep the same y-axes)
         self.ssa_anns = self.p.edf.annots()
         self.ssa_anns_lookup = {v: i for i, v in enumerate(self.ssa_anns)}
         
         # but initialize a separate ss for annotations only
+        # for lookups (event instance listing)
         self.ssa = lp.segsrv( self.p )
         self.ssa.populate( chs = [ ] , anns = self.ssa_anns )
         self.ssa.set_annot_format6( False )  # pyqtgraph vs plotly
+        self.ssa.window(0,30) # reset window (for simple plot)
         
         # populate here, as used by plot_simple (prior to render)
         self.ss_anns = self.ui.tbl_desc_annots.checked()
         self.ss_chs = self.ui.tbl_desc_signals.checked()
+
+        # update palette
+        self.set_palette()
         
 
     # --------------------------------------------------------------------------------
     # populate annotation instances (updated when annots selected)
 
     def _update_instances(self, anns):
-        evts = pd.Series(self.ssa.get_all_annots(anns))
+
+        evts = pd.Series(self.ssa.get_all_annots(anns,False))
+
+        hms_evts = pd.Series(self.ssa.get_all_annots(anns,True))
 
         # always define df
         df = pd.DataFrame(columns=["class", "start", "stop"])

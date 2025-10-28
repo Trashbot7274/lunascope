@@ -58,9 +58,14 @@ class HypnoMixin:
         hypno(ss.STAGE, ax=self.hypnocanvas.ax)
         self.hypnocanvas.draw_idle()
         
-        # add annotations?
+        # build HYPNO command
         cmd_str = 'EPOCH align & HYPNO'
 
+        cmd_str += ' req-pre-post=' + str( self.ui.spin_req_pre_post.value() )
+        cmd_str += ' end-wake=' + str( self.ui.spin_end_wake.value() )
+        cmd_str += ' end-sleep=' + str( self.ui.spin_end_sleep.value() )
+        
+        # annotations?
         if self.ui.check_hypno_annots.isChecked():
             cmd_str += " annot"
 
@@ -75,6 +80,7 @@ class HypnoMixin:
             s = dt.toString("dd/MM/yy-HH:mm:ss")
             cmd_str += " lights-on="+s
 
+            
         # Luna call to get full HYPNO outputs
         try:
             res = self.p.silent_proc(cmd_str)
