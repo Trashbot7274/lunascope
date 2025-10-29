@@ -324,7 +324,6 @@ class Controller( QMainWindow,
         self._update_spectrogram_list()
         self._update_soap_list()
         self._update_params()
-
         
         # initially, no signals rendered / not rendered / not current
         self._set_render_status( False , False )
@@ -421,7 +420,8 @@ class Controller( QMainWindow,
 
         self.cmap = {}
 
-        self.cmap_list = [ ] 
+        self.cmap_list = [ ]
+        self.cmap_rlist = [ ] 
 
         self.stgcols_hex = {
             'N1': '#20B2DA',  # rgba(32,178,218,1)
@@ -511,13 +511,19 @@ class Controller( QMainWindow,
         self._set_black_palette()
         self.palset = 'bespoke'
         chs = self.ui.tbl_desc_signals.checked()
+        # re-order list
+        if self.cmap_list:
+            chs = sorted( chs, key=lambda x: (self.cmap_list.index(x) if x in self.cmap_list else len(self.cmap_list) + chs.index(x)))
+            chs.reverse()
         nchan = len( chs )
         # set signal colors
         self.colors = override_colors(self.colors, chs, self.cmap)
         # and annots
         anns = self.ui.tbl_desc_annots.checked()
+        if self.cmap_rlist:
+            anns = sorted( anns, key=lambda x: (self.cmap_list.index(x) if x in self.cmap_list else len(self.cmap_list) + anns.index(x)))
         self.acolors = override_colors(self.acolors, anns, self.cmap)
-        self.acolors = self._update_stage_cols( self.acolors , self.ss_anns )
+        self.acolors = self._update_stage_cols( self.acolors , anns )
         self._update_cols()
 
 
@@ -539,7 +545,8 @@ class Controller( QMainWindow,
                 text = open(txt_file, "r", encoding="utf-8").read()
                 
                 self.cmap = {}
-                self.cmap_list = [ ] 
+                self.cmap_list = [ ]
+                self.cmap_rlist = [ ] 
                 for line in text.splitlines():
                     line = line.strip()
                     if not line or line.startswith("#"):
@@ -551,7 +558,7 @@ class Controller( QMainWindow,
 
                 # reverse order (for plotting goes y 0 - 1 is bottom - top currently
                 # and can't be bothered to fix
-                self.cmap_list.reverse()
+                self.cmap_rlist = list(reversed(self.cmap_list))
                 
                 # and set them
                 self._set_bespoke_palette()

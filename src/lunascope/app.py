@@ -116,7 +116,7 @@ def main(argv=None) -> int:
         try:
             text = open( args.cmap_file , "r", encoding="utf-8").read()            
             controller.cmap = {}
-            controller.cmap_list = [ ] 
+            controller.cmap_list = [ ]
             for line in text.splitlines():
                 line = line.strip()
                 if not line or line.startswith("#"):
@@ -125,7 +125,7 @@ def main(argv=None) -> int:
                 if len(parts) >= 2:
                     controller.cmap[parts[0]] = parts[1]
                     controller.cmap_list.append( parts[0] )
-            controller.cmap_list.reverse()
+            controller.cmap_rlist = list(reversed(controller.cmap_list))
             controller.palset = 'bespoke'
 
         except (UnicodeDecodeError, OSError) as e:

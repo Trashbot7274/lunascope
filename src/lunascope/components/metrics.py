@@ -149,7 +149,7 @@ class MetricsMixin:
 
         # re-order channels based on a cmap?
         if self.cmap_list:
-            df = sort_df_by_list( df , 0 , list(reversed(self.cmap_list)) )
+            df = sort_df_by_list( df , 0 , self.cmap_list )
             
         # SOURCE model from your DataFrame
         src = self.df_to_model(df)  # must return QStandardItemModel
@@ -201,7 +201,7 @@ class MetricsMixin:
 
         # re-order channels based on a cmap?                                                                                             
         if self.cmap_list:
-            df = sort_df_by_list( df , 0 , list(reversed(self.cmap_list)) )
+            df = sort_df_by_list( df , 0 , self.cmap_list )
         
         src = self.df_to_model(df)  # must be QStandardItemModel
 
@@ -273,24 +273,24 @@ class MetricsMixin:
 
     def _update_instances(self, anns):
 
-        evts = pd.Series(self.ssa.get_all_annots(anns,False))
-
-        hms_evts = pd.Series(self.ssa.get_all_annots(anns,True))
-
-        # always define df
-        df = pd.DataFrame(columns=["class", "start", "stop"])
+        # request w/ hms and duration also (True)                                                                                                                                                                                           
+        evts = pd.Series(self.ssa.get_all_annots(anns, True ))
+	
+        # always define df                                                                                                                                                                                                                  
+        df = pd.DataFrame(columns=["class", "hms", "start", "dur"])
 
         if len(evts) != 0:
-            a = evts.str.rsplit("|", n=1, expand=True)
+            a = evts.str.rsplit("| ", n=3, expand=True)
             b = a[1].str.split("-", n=1, expand=True)
 
             df = pd.DataFrame({
                 "class": a[0].str.strip(),
+                "hms": a[2].str.strip(),
                 "start": pd.to_numeric(b[0], errors="coerce"),
-                "stop":  pd.to_numeric(b[1], errors="coerce"),
+                "dur": pd.to_numeric(a[3], errors="coerce")
             }).sort_values("start", ascending=True, na_position="last")
         self.events_model = self.df_to_model(df)
-
+        
         self.events_table_proxy = QSortFilterProxyModel(self)
         self.events_table_proxy.setSourceModel(self.events_model)
 
@@ -335,8 +335,8 @@ class MetricsMixin:
         src_row   = src_idx.row()
 
         # get interval            
-        left = self.events_model.data(self.events_model.index(src_row, 1))
-        right = self.events_model.data(self.events_model.index(src_row, 2))
+        left = float(self.events_model.data(self.events_model.index(src_row, 2)))
+        right = left + float(self.events_model.data(self.events_model.index(src_row, 3)))
 
         # expand?
         left , right = expand_interval( left, right )

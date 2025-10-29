@@ -558,17 +558,44 @@ class SignalsMixin:
     
     def _initiate_curves(self):
 
+
+        #
+        # get (and order) display items
+        #
+
+        self.ss_chs = self.ui.tbl_desc_signals.checked()
+
+        self.ss_anns = self.ui.tbl_desc_annots.checked()
+
+        # re-order channels, annots?
+        if self.cmap_list:
+            self.ss_chs = sorted( self.ss_chs, key=lambda x: (self.cmap_rlist.index(x) if x in self.cmap_rlist else len(self.cmap_rlist) + self.ss_chs.index(x)))
+            self.ss_anns = sorted( self.ss_anns, key=lambda x: (self.cmap_list.index(x) if x in self.cmap_list else len(self.cmap_list) + self.ss_anns.index(x)))
+
+        nchan = len( self.ss_chs )
+
+        nann = len( self.ss_anns )
+
+        #
+        # clear prior items
+        #
+
         pi = self.ui.pg1.getPlotItem()
         pi.clear() 
 
         for curve in self.curves:
             pi.removeItem(curve)
-        self.curves.clear()
-        
-        # get all checked channels
-        self.ss_chs = self.ui.tbl_desc_signals.checked()
 
-        nchan = len( self.ss_chs )
+        self.curves.clear()
+
+        for curve in self.annot_curves:
+            pi.removeItem(curve)
+
+        self.annot_curves.clear()
+        
+        #
+        # initiate channels
+        #
         
         for i in range(nchan):
             pen = pg.mkPen( self.colors[i], width=1, cosmetic=True)
@@ -581,13 +608,7 @@ class SignalsMixin:
         #
 
         self.annot_mgr = TrackManager( self.ui.pg1 )
-
-        # get all checked annots
-        self.ss_anns = self.ui.tbl_desc_annots.checked()
-
-        nann = len( self.ss_anns )
-        self.annot_curves = []
-
+        
         for i in range(nann):
             col = self.acolors[i]
             self.annot_mgr.update_track( self.ss_anns[i] , [] , [], [], [] , color = col )
@@ -619,7 +640,7 @@ class SignalsMixin:
         #
 
         self.labs = TextBatch(pi.vb,
-               QtGui.QFont("Arial", 12, QtGui.QFont.Bold),
+               QtGui.QFont("Arial", 10, QtGui.QFont.Normal),
                color=(255,255,255),
                mode='device',
                bg=(0,0,0,170),    # semi-transparent black
@@ -783,14 +804,12 @@ class SignalsMixin:
         vb.setRange(xRange=(x1,x2), padding=0, update=False)  # no immediate paint
 
         # ch-ordering? (based on index
-        index = list(range(len(chs)))
         if self.cmap_list:
-            index = sorted( 
-                index , 
-                key = lambda i: (self.cmap_list.index(chs[i]) if chs[i] in self.cmap_list else len(self.cmap_list) + i)
-                )
+            chs = sorted( chs, key=lambda x: (self.cmap_list.index(x) if x in self.cmap_list else len(self.cmap_list) + chs.index(x)))
+            anns = sorted( anns, key=lambda x: (self.cmap_list.index(x) if x in self.cmap_list else len(self.cmap_list) + anns.index(x)))
         
         # channels
+        nchan = len( chs )
         idx = 0        
         tv = [ '' ] * ( len(chs) + len(anns) )
         yv = [ 0.5 ] * ( len(chs) + len(anns) )
@@ -798,8 +817,8 @@ class SignalsMixin:
         for ch in chs:
             # signals
             x = self.ss.get_timetrack( ch )
-            y = self.ss.get_scaled_signal( ch , index[ idx ] )            
-            self.curves[idx].setData(x, y)            
+            y = self.ss.get_scaled_signal( ch , idx ) 
+            self.curves[nchan-idx-1].setData(x, y)            
             # labels            
             ylim = self.ss.get_window_phys_range( ch )
             if self.show_labels:
@@ -904,9 +923,11 @@ class SignalsMixin:
         else:
             h = 0
 
-        # re-order channels?
+        # re-order channels, annots?
         if self.cmap_list:
             chs = sorted( chs, key=lambda x: (self.cmap_list.index(x) if x in self.cmap_list else len(self.cmap_list) + chs.index(x)))
+            anns = sorted( anns, key=lambda x: (self.cmap_list.index(x) if x in self.cmap_list else len(self.cmap_list) + anns.index(x)))
+            chs.reverse()
             
         # channels
         idx = 0        
@@ -942,9 +963,9 @@ class SignalsMixin:
         # annots (from ssa)
         aidx = 0
         self.ssa.compile_windowed_annots( anns )
-#        anns1 = [self.ssa_anns_lookup[v] for v in anns ]
         
         for ann in anns:
+
             # get events
             a0 = self.ssa.get_annots_xaxes( ann )            
 
@@ -952,6 +973,7 @@ class SignalsMixin:
             if len(a0) == 0:
                 idx = idx + 1
                 aidx = aidx + 1
+                self.annot_curves[ aidx ].setData( [ ] , [ ] ) 
                 continue
 
             # pull
