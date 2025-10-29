@@ -72,9 +72,10 @@ def _parse_args(argv):
 
 def main(argv=None) -> int:
 
-    import faulthandler, sys, signal
-    faulthandler.enable(all_threads=True)
-    faulthandler.register(signal.SIGUSR1)  # kill -USR1 <pid> dumps stacks
+#    import faulthandler, sys, signal
+#    faulthandler.enable(all_threads=True)
+#    if hasattr( faulthandler, "register" ):
+#        faulthandler.register(signal.SIGUSR1)  # kill -USR1 <pid> dumps stacks
 
     args = _parse_args(argv or sys.argv[1:])
     app = QApplication(sys.argv)
