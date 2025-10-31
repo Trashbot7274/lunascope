@@ -224,7 +224,7 @@ class Controller( QMainWindow,
         self.ui.resizeDocks([ self.ui.dock_sig, self.ui.dock_annot, self.ui.dock_annots ] , 
                             [  int(h*0.4), int(h*0.3), int(h*0.1) ],
                             Qt.Vertical)
-        w_right = 320
+        w_right = 380
         self.ui.resizeDocks([self.ui.dock_slist, self.ui.dock_sig], [self.width()-w_right, w_right], Qt.Horizontal)
 
         # arrange docks: general
@@ -387,7 +387,22 @@ class Controller( QMainWindow,
         self.popshypnocanvas.ax.cla()
         self.popshypnocanvas.figure.canvas.draw_idle()
 
+        # filters: chennels -> filters
+        self.fmap = { } 
 
+        # filter label -> frqs
+        self.fmap_frqs = {
+            "0.3-35Hz": [0.3,35] ,
+            "Slow": [0.5,1] ,
+            "Delta": [1,4],
+            "Theta": [4,8],
+            "Alpha": [8,11],
+            "Sigma": [11,15],
+            "Beta": [15,30] ,
+            "Gamma": [30,50] } 
+
+        # SR + label --> butterworth model
+        self.fmap_flts = { } 
 
     #
     # helper to handle render button

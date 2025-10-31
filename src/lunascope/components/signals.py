@@ -25,11 +25,13 @@ import pandas as pd
 import numpy as np
 from collections import defaultdict
 
+from scipy.signal import butter, sosfilt
+
 from concurrent.futures import ThreadPoolExecutor
 from PySide6.QtCore import QMetaObject, Qt, Slot
 
 import pyqtgraph as pg
-from PySide6.QtWidgets import QProgressBar
+from PySide6.QtWidgets import QProgressBar, QMessageBox
 from PySide6.QtCore import QSignalBlocker
 
 class SignalsMixin:
@@ -177,10 +179,10 @@ class SignalsMixin:
 
         # get full, original staging from annotations
         stgs = [ 'N1' , 'N2' , 'N3' , 'R' , 'W' , '?' , 'L' ] 
-#        stgns = { 'N1': 0.2 , 'N2': 0.1 , 'N3': 0 , 'R': 0.3  , 'W': 0.4 , '?': 0.5 , 'L': 0.6 }
-        stgns = {'N1': 0.0,
+
+        stgns = {'N1': 0.13333333333333333,
                  'N2': 0.06666666666666667,
-                 'N3': 0.13333333333333333,
+                 'N3': 0.0,
                 'R': 0.2,
                 'W': 0.26666666666666666,
                 '?': 0.3333333333333333,
@@ -270,10 +272,33 @@ class SignalsMixin:
         stgs = [ 'N1' , 'N2' , 'N3' , 'R' , 'W' , '?' , 'L' ] 
         stg_evts = self.p.fetch_annots( stgs , 30 )
 
+
+        # check stagiung for problems
+
+        has_staging = self._has_staging()
+
+        if not has_staging:
+            QMessageBox.critical(
+                None,
+                "No valid staging",
+                "Note: no valid staging found\ncheck your data (including possible overlaps & epoch misalignment)"
+            )
+            return
+        
         # get staging (in units no larger than 30 seconds)
         # use STAGES here so that we only get the unmasked datapoints
-        res = self.p.silent_proc( 'EPOCH align verbose & STAGE' )
 
+        try:
+            res = self.p.silent_proc( 'EPOCH align verbose & STAGE' )
+        except (RuntimeError) as e:
+            QMessageBox.critical(
+                None,
+                "Error running STAGE: checking for overlapping staging annotations",
+                f"Exception: {type(e).__name__}: {e}"
+            )
+            return
+
+        
         if "EPOCH: E" in res:
             df1 = self.p.table( 'EPOCH' , 'E' )
             df1 = df1[ ['E' , 'START' , 'STOP' ] ] 
@@ -643,7 +668,7 @@ class SignalsMixin:
                QtGui.QFont("Arial", 10, QtGui.QFont.Normal),
                color=(255,255,255),
                mode='device',
-               bg=(0,0,0,170),    # semi-transparent black
+               bg=(0,0,0,70),    # semi-transparent black (was 170)
                pad=(6,3),         # x/y padding in px
                radius=20,          # rounded corners
                outline= (255,255,255,80) )      # or (255,255,255,80)
@@ -817,7 +842,11 @@ class SignalsMixin:
         for ch in chs:
             # signals
             x = self.ss.get_timetrack( ch )
-            y = self.ss.get_scaled_signal( ch , idx ) 
+            y = self.ss.get_scaled_signal( ch , idx )
+            # note: if filters set, these will have been passed to segsrv, which will
+            #       take care of filtering in the above call
+
+            # draw
             self.curves[nchan-idx-1].setData(x, y)            
             # labels            
             ylim = self.ss.get_window_phys_range( ch )
@@ -830,7 +859,6 @@ class SignalsMixin:
         # annots
         aidx = 0
         self.ss.compile_windowed_annots( anns )
-
         for ann in anns:
             a0 = self.ss.get_annots_xaxes( ann )            
             if len(a0) == 0:
@@ -870,17 +898,29 @@ class SignalsMixin:
         gaps = self.annot_mgr.update_track( "__#gaps__" ,x0 = x0 , x1 = x1 , y0 = y0 , y1 = y1 )
             
         # clock-ticks                                                                                                          
-        tks = self.ss.get_clock_ticks(6)
+        x1 = self.ss.get_window_left()
+        x2 = self.ss.get_window_right()
+        tks = self.ss.get_clock_ticks(6) 
         tx = list( tks.keys() )
-        tv = list( tks.values() )        
-        self.tb.setData(tx, [ 0.99 ] * len( tx ) , tv )
+        tv = list( tks.values() )
+        ty = [ 0.99 ] * len( tx )
+        tv.append( self._durstr( x1 , x2 ) )
+        tx.append( x2 - 0.05 * ( x2 - x1 ) )
+        ty.append( 0.03 )
+        self.tb.setData(tx, ty , tv )
 
         # repaint
         vb.update()  
 
 
-
-
+    def _durstr( self , x , y ):
+        d = y - x
+        if d < 60: return str(int(d))+'s'
+        d = d/60
+        if d < 60: return str(int(d))+'m'
+        d = d/60 
+        return format(d, ".1f")+'h'
+    
     # --------------------------------------------------------------------------------
     #
     # simple (non-segsrv) update main signal traces - called if segsrv not populated
@@ -943,6 +983,9 @@ class SignalsMixin:
                 continue
             x = d[:,0]  # time-track
             y = d[:,1]  # unscaled signal
+            # filter?
+            if ch in self.fmap:
+                y = self.filter_signal( y , ( self.fmap[ch] , self.srs[ ch ] ) )
             # need to scale manually: to 0/1
             mn, mx = min(y), max(y)
             if mx > mn: y = (y - mn) / (mx - mn)
@@ -971,9 +1014,9 @@ class SignalsMixin:
 
             # nothing to do?
             if len(a0) == 0:
+                self.annot_curves[ aidx ].setData( [ ] , [ ] )
                 idx = idx + 1
-                aidx = aidx + 1
-                self.annot_curves[ aidx ].setData( [ ] , [ ] ) 
+                aidx = aidx + 1                
                 continue
 
             # pull
@@ -1016,16 +1059,41 @@ class SignalsMixin:
         y1 =  [ 0.96 for x in gaps ]
         gaps = self.annot_mgr.update_track( "__#gaps__" ,x0 = x0 , x1 = x1 , y0 = y0 , y1 = y1 )
             
-        # clock-ticks                                                                                                          
+        # clock-ticks
+        x1 = self.ssa.get_window_left()
+        x2 = self.ssa.get_window_right()
         tks = self.ssa.get_clock_ticks(6)
         tx = list( tks.keys() )
-        tv = list( tks.values() )        
-        self.tb.setData(tx, [ 0.99 ] * len( tx ) , tv )
+        tv = list( tks.values() )
+        ty = [ 0.99 ] * len( tx )
+        tv.append( self._durstr( x1 , x2 ) )
+        tx.append( x2 - 0.05 * ( x2 - x1 ) )
+        ty.append( 0.03 )
+        self.tb.setData(tx, ty , tv )
 
         # repaint
         vb.update()  
         
 
+
+# ------------------------------------------------------------
+
+    def filter_signal( self , x , fs_key , order = 2):
+
+        if fs_key in self.fmap_flts:
+            return sosfilt( self.fmap_flts[ fs_key ] , x )
+        else:
+            frqs = self.fmap_frqs[ fs_key[0] ]
+            sr = fs_key[1]
+            # ensure below Nyquist 
+            if frqs[1] <= sr / 2:
+                sos = butter( order,
+                              frqs , 
+                              btype='band',
+                              fs=sr , 
+                              output='sos' )
+                self.fmap_flts[ fs_key ] = sos
+                return sosfilt( sos , x )
         
 # ------------------------------------------------------------
 
@@ -1786,3 +1854,8 @@ def _ensure_min_px_width(vb, x0, x1, px=1):
     x0a = np.where(too_narrow, xc - 0.5*wmin, x0)
     x1a = np.where(too_narrow, xc + 0.5*wmin, x1)
     return x0a, x1a
+
+
+
+
+

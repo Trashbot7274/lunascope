@@ -30,12 +30,45 @@ from .plts import hypno_density, hypno
         
 class SoapPopsMixin:
 
+
+    # valid staging:
+    #   - EDF/annotations attached
+    #   - found at least some stage-aliased annotations
+    #   - no overlapping staging annotations
+    #   - no conflicts in epoch-assignment
+
     def _has_staging(self):
         if not hasattr(self, "p"): return False
+
+        # CONTAINS stages allows for possible conflicting stages
         res = self.p.silent_proc( 'CONTAINS stages' )
         df = self.p.table( 'CONTAINS' )
-        has_staging = df.at[df.index[0], "STAGES"] == 1
-        return has_staging
+        if 'df' in locals() and isinstance(df, pd.DataFrame) and not df.empty:
+
+            # no staging info
+            if df.at[df.index[0], "STAGES"] != 1:
+                return False
+            
+            # overlapping stage annotations
+            if 'OVERLAP' in df.columns and len(df) == 1 and df.at[df.index[0], 'OVERLAP'] == 1:
+                return False
+
+            # fewer than 2 unique stages
+            if 'UNIQ_STAGES' in df.columns and len(df) == 1 and df.at[df.index[0], 'UNIQ_STAGES'] < 2:
+                return False
+
+            # any conflicts (will generate an 'E' table) 
+            df2 = self.p.table( 'CONTAINS' , 'E' )
+            if 'df2' in locals() and isinstance(df2, pd.DataFrame) and not df2.empty:
+                return False
+                
+        else:
+            # some other problem if not getting the df
+            return False
+
+        # if here, we must have good staging
+        return True
+
     
     def _init_soap_pops(self):
 
@@ -132,7 +165,7 @@ class SoapPopsMixin:
       
         if not hasattr(self, "p"): return
         
-        # paraters
+        # parameters
         pops_chs = self.ui.combo_pops.currentText()
         if type( pops_chs ) is str: pops_chs = [ pops_chs ] 
         pops_chs = ",".join( pops_chs )
@@ -140,21 +173,23 @@ class SoapPopsMixin:
         pops_path = self.ui.txt_pops_path.text()
         pops_model = self.ui.txt_pops_model.text()
         ignore_obs = self.ui.check_pops_ignore_obs.checkState() == Qt.Checked
-
+        
         has_staging = self._has_staging()
         # requires staging
         if not has_staging:
             ignore_obs = True
-        
-        # run POPS
 
-        #test if file exists
-        # pops_mod = os.path.join( pops_path, pops_model+ ".mod")
-        # make more robust - and expand ~ --> user dir
+        # ignore existing staging
+        opts = ""
+        if ignore_obs:
+            opts += " ignore-obs=T"
+            has_staging = False
+            
+
+        # test if resource file exists
         base = Path(pops_path).expanduser()
         base = Path(os.path.expandvars(str(base))).resolve()   # absolute
         pops_mod = base / f"{str(pops_model).strip()}.mod"
-
         if not pops_mod.is_file():
             QMessageBox.critical(
                 None,
@@ -163,9 +198,10 @@ class SoapPopsMixin:
             )
             return None
 
+        # run POPS
 
         try:
-            cmd_str = 'EPOCH align & RUN-POPS sig=' + pops_chs + ' path=' + pops_path + ' model=' + pops_model
+            cmd_str = 'EPOCH align & RUN-POPS sig=' + pops_chs + ' path=' + pops_path + ' model=' + pops_model + opts
             self.p.eval( cmd_str )
         except (RuntimeError) as e:
             QMessageBox.critical(
