@@ -1,3 +1,4 @@
+
 #  --------------------------------------------------------------------
 #
 #  This file is part of Luna.
@@ -21,9 +22,13 @@
 
 import lunapi as lp
 import io
+import numpy as np
 
 from PySide6.QtWidgets import QVBoxLayout
 from PySide6 import QtCore, QtWidgets, QtGui
+
+from concurrent.futures import ThreadPoolExecutor
+from PySide6.QtCore import QMetaObject, Q_ARG, Qt, Slot
 
 from .mplcanvas import MplCanvas
 from .plts import plot_hjorth, plot_spec
@@ -97,20 +102,108 @@ class SpecMixin:
 
     # ------------------------------------------------------------
     # Caclculate a spectrogram
-        
-    def _calc_spectrogram(self):
 
-        # get current channel
+    
+    def _calc_spectrogram(self):
         ch = self.ui.combo_spectrogram.currentText()
-        
-        # check it still exists in the in-memory EDF
         if ch not in self.p.edf.channels():
             return
 
-        plot_spec( ch , ax=self.spectrogramcanvas.ax , p = self.p , gui = self.ui )
+        # UI busy
+        self._busy = True
+        self._buttons(False)
+        self.sb_progress.setVisible(True)
+        self.sb_progress.setRange(0, 0)
+        self.sb_progress.setFormat("Running…")
+
+        # submit worker
+        fut_spec = self._exec.submit(
+            self._derive_spectrogram,
+            self.p,
+            ch,
+            float(self.ui.spin_lwrfrq.value()),
+            float(self.ui.spin_uprfrq.value()),
+            float(self.ui.spin_win.value())
+        )
+
+
+        # done callback runs in worker thread -> hop to GUI
+        def _done( _f = fut_spec ):
+            try:
+                self._last_result = _f.result()  # (xi, yi, zi)
+                # enqueue a call that runs in 'self' thread
+                QMetaObject.invokeMethod(self,"_spectrogram_done_ok",Qt.QueuedConnection)
+            except Exception as e:
+                self._last_exc = e
+                self._last_tb = f"{type(e).__name__}: {e}"
+                QMetaObject.invokeMethod(self, "_spectrogram_done_err", Qt.QueuedConnection)
+
+        fut_spec.add_done_callback(_done)
+
+    @Slot()
+    def _spectrogram_done_ok(self):
+        try:
+            xi, yi, zi = self._last_result 
+            self._complete_spectrogram(xi, yi, zi)
+        finally:
+            self._busy = False
+            self._buttons(True)
+            self.sb_progress.setRange(0, 100)
+            self.sb_progress.setValue(0)
+            self.sb_progress.setVisible(False)
+
+    @Slot()
+    def _spectrogram_done_err(self):
+        try:
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.critical(self, "Error deriving spectrogram", self._last_tb)
+        finally:
+            self._busy = False
+            self._buttons(True)
+            self.sb_progress.setRange(0, 100)
+            self.sb_progress.setValue(0)
+            self.sb_progress.setVisible(False)
+     
+            
+    def _derive_spectrogram(self, p, ch, minf, maxf, w):
+        # worker thread: do not touch GUI,
+        # return numpy arrays (by ref)
+        
+        df = p.silent_proc( "PSD min-sr=32 epoch-spectrum dB sig="+ch+" min="+str(minf)+" max="+str(maxf) )[ 'PSD: CH_E_F' ]        
+        
+        x = df['E'].to_numpy(dtype=int)
+        y = df['F'].to_numpy(dtype=float)
+        z = df[ 'PSD' ].to_numpy(dtype=float)
+
+        incl = np.zeros(len(df), dtype=bool)
+        incl[ (y >= minf) & (y <= maxf) ] = True
+        x = x[ incl ]
+        y = y[ incl ]
+        z = z[ incl ]
+        z = lp.winsorize( z , limits=[w, w] )
+        
+        xn = max(x) - min(x) + 1
+        yn = np.unique(y).size
+        zi, yi, xi = np.histogram2d(y, x, bins=(yn,xn), weights=z, density=False )
+        counts, _, _ = np.histogram2d(y, x, bins=(yn,xn))
+        with np.errstate(divide='ignore', invalid='ignore'):
+            zi = zi / counts
+            zi = np.ma.masked_invalid(zi)
+
+        return xi, yi, zi
+
+
+    def _complete_spectrogram(self,xi,yi,zi):
+        # we can now touch the GUI
+        ch = self.ui.combo_spectrogram.currentText()
+        minf = self.ui.spin_lwrfrq.value() 
+        maxf = self.ui.spin_uprfrq.value()
+                
+        plot_spec( xi,yi,zi, ch, minf, maxf, ax=self.spectrogramcanvas.ax , gui = self.ui )
 
         self.spectrogramcanvas.draw_idle()
 
+        
         
     # ------------------------------------------------------------
     # Caclculate a Hjorth plot        

@@ -153,7 +153,7 @@ def plot_hjorth( ch , ax , p , gui ):
 # plot a spectrogram
         
 @staticmethod
-def plot_spec( ch , ax , p, gui, clear = True):
+def plot_spec( xi,yi,zi, ch, minf, maxf, ax , gui, clear = True):
 
     created = False
     if ax is None:
@@ -162,35 +162,7 @@ def plot_spec( ch , ax , p, gui, clear = True):
     elif clear:
         ax.clear()
         
-    # parameters
-    minf = gui.spin_lwrfrq.value()
-    maxf = gui.spin_uprfrq.value()
-    w = gui.spin_win.value()
-
-    # spectral analysis
-    df = p.silent_proc( "PSD min-sr=32 epoch-spectrum dB sig="+ch+" min="+str(minf)+" max="+str(maxf) )[ 'PSD: CH_E_F' ]
-
-    print(df)
-    if len(df) == 0: return ax
-
-    x = df['E'].to_numpy(dtype=int)
-    y = df['F'].to_numpy(dtype=float)
-    z = df[ 'PSD' ].to_numpy(dtype=float)
-
-    incl = np.zeros(len(df), dtype=bool)
-    incl[ (y >= minf) & (y <= maxf) ] = True
-    x = x[ incl ]
-    y = y[ incl ]
-    z = z[ incl ]
-    z = lp.winsorize( z , limits=[w, w] )
-
-    xn = max(x) - min(x) + 1
-    yn = np.unique(y).size
-    zi, yi, xi = np.histogram2d(y, x, bins=(yn,xn), weights=z, density=False )
-    counts, _, _ = np.histogram2d(y, x, bins=(yn,xn))
-    with np.errstate(divide='ignore', invalid='ignore'):
-        zi = zi / counts
-    zi = np.ma.masked_invalid(zi)
+    if len(xi) == 0: return ax
 
     ax.set_xlabel('Epoch')
     ax.set_ylabel('Frequency (Hz)')
