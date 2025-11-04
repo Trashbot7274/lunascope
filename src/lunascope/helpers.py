@@ -22,8 +22,13 @@
 
 
 from PySide6.QtGui import QAction, QStandardItemModel
+from PySide6.QtGui import QRegularExpressionValidator
+
 from PySide6.QtCore import QModelIndex, QObject, Signal, Qt, QSortFilterProxyModel
+from PySide6.QtCore import QRegularExpression, Qt
+
 from PySide6.QtWidgets import QDockWidget
+from PySide6.QtCore import QSortFilterProxyModel
 
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QColorDialog, QLabel, QApplication
@@ -311,3 +316,6 @@ def random_darkbg_colors(n, seed=None):
             cols.append(pg.mkColor(r, g, b))
             hues.append(h)
     return cols
+
+
+

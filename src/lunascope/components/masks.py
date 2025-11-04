@@ -19,48 +19,78 @@
 #
 #  --------------------------------------------------------------------
 
-        
+
+from PySide6.QtWidgets import QMessageBox
+
+
 class MasksMixin:
     
     def _init_masks(self):
         
         # wiring
-        self.ui.butt_mask_ifnot_N1.clicked.connect( lambda: self._apply_mask("ifnot=N1") )
-        self.ui.butt_mask_ifnot_N2.clicked.connect( lambda: self._apply_mask("ifnot=N2") )
-        self.ui.butt_mask_ifnot_N3.clicked.connect( lambda: self._apply_mask("ifnot=N3") )
-        self.ui.butt_mask_ifnot_NR.clicked.connect( lambda: self._apply_mask("ifnot=N1,N2,N3") )
-        self.ui.butt_mask_ifnot_R.clicked.connect( lambda: self._apply_mask("ifnot=R") )
-        self.ui.butt_mask_ifnot_W.clicked.connect( lambda: self._apply_mask("ifnot=W") )
-                
-        self.ui.butt_mask_if_N1.clicked.connect( lambda: self._apply_mask("if=N1") )
-        self.ui.butt_mask_if_N2.clicked.connect( lambda: self._apply_mask("if=N2") )
-        self.ui.butt_mask_if_N3.clicked.connect( lambda: self._apply_mask("if=N3") )
-        self.ui.butt_mask_if_NR.clicked.connect( lambda: self._apply_mask("if=N1,N2,N3") )
-        self.ui.butt_mask_if_R.clicked.connect( lambda: self._apply_mask("if=R") )
-        self.ui.butt_mask_if_W.clicked.connect( lambda: self._apply_mask("if=W") )
+        self.ui.butt_generic_mask.clicked.connect( self._apply_mask )
 
-        self.ui.butt_generic_mask.clicked.connect( lambda: self._apply_mask( self.ui.txt_generic_mask.text() ) )
+    # ------------------------------------------------------------
+    # Update list of signals (req. 32 Hz or more)
+        
+    def _update_mask_list(self):
 
+        # clear first
+        self.ui.combo_ifnot_mask.clear()
+        self.ui.combo_if_mask.clear()
 
+        anns = [ '<none>' ]
+        
+        anns.extend( self.p.edf.annots() )
+        
+        self.ui.combo_ifnot_mask.addItems( anns )
+
+        self.ui.combo_if_mask.addItems( anns )
+
+        
     # ------------------------------------------------------------
     # Apply MASK
 
-    def _apply_mask(self, msk ):
-
-        # nothing to do
-        if msk == "": return
+    def _apply_mask(self):
 
         # requires attached individal
         if not hasattr(self, "p"): return
 
+        # what has been set?
+        gen_msk = self.ui.txt_generic_mask.text()
+        if_msk = self.ui.combo_if_mask.currentText()
+        ifnot_msk = self.ui.combo_ifnot_mask.currentText()
+
+        n = 0
+        msk = ''
+        if gen_msk != "": n = n + 1 ; msk = gen_msk
+        if if_msk != "<none>": n = n + 1; msk = 'if='+if_msk
+        if ifnot_msk != "<none>": n = n + 1; msk = 'ifnot='+ifnot_msk
+
+        # nothing to do
+
+        if n == 0:
+            QMessageBox.warning( None, "Invalid mask", "No mask values specified")
+            return
+
+        # more than one mask set
+
+        if n != 1:
+            QMessageBox.warning( None, "Invalid mask", "More than one mask set" )
+            return
+        
+        
         # save selections
+
         self.curr_chs = self.ui.tbl_desc_signals.checked()
         self.curr_anns = self.ui.tbl_desc_annots.checked()
         
         # run MASK
+
         self.p.eval( 'MASK ' + msk + ' & RE ' )
 
         # update the things that need updating
+
         self._set_render_status( self.rendered , False )
         self._update_metrics()
         self._update_pg1()

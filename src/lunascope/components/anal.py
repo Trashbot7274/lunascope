@@ -73,7 +73,9 @@ class AnalMixin:
     def _exec_luna(self):
         
         # nothing attached
-        if not hasattr(self, "p"): return
+        if not hasattr(self, "p"):
+            QMessageBox.critical( self.ui , "Error", "No instance attached" )
+            return
 
         # if already running.
         if self._busy:
@@ -214,6 +216,7 @@ class AnalMixin:
         # update main metrics tables (i.e. if new things added)
         self._update_metrics()
         self._update_spectrogram_list()
+        self._update_mask_list()
         self._update_soap_list()
 
         # reset any prior selections

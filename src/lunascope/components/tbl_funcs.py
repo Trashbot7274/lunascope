@@ -174,7 +174,6 @@ def add_combo_column(
 # -----------------------------------------------------------------------------
 
 
-
 def add_check_column(
     view: QTableView,
     channel_col_before_insert: int,
@@ -345,3 +344,41 @@ def add_check_column(
 
 
 
+# ------------------------------------------------------------
+#
+# filter tabels
+#
+# ------------------------------------------------------------
+        
+def attach_comma_filter(table_view, line_edit, proxy=None):
+    from PySide6.QtCore import Qt, QRegularExpression, QSortFilterProxyModel
+
+    # create new proxy only if none provided
+    if proxy is None:
+        proxy = QSortFilterProxyModel(table_view)
+        proxy.setSourceModel(table_view.model())
+        table_view.setModel(proxy)
+    else:
+        # already the view's model; do not setSourceModel again
+        if table_view.model() is not proxy:
+            proxy.setSourceModel(table_view.model())
+            table_view.setModel(proxy)
+
+    def on_text_changed(text: str):
+        parts = [s.strip() for s in text.split(',') if s.strip()]
+        if not parts:
+            proxy.setFilterRegularExpression(QRegularExpression())
+            return
+        esc = [QRegularExpression.escape(p) for p in parts]
+        rx = QRegularExpression("(" + "|".join(esc) + ")")
+        rx.setPatternOptions(QRegularExpression.CaseInsensitiveOption)
+        proxy.setFilterRegularExpression(rx)
+
+    # avoid duplicate connects
+    if not hasattr(proxy, "_comma_filter_connected"):
+        line_edit.textChanged.connect(on_text_changed)
+        proxy._comma_filter_connected = True
+
+    proxy.setFilterKeyColumn(-1)
+    proxy.setFilterCaseSensitivity(Qt.CaseInsensitive)
+    return proxy

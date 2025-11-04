@@ -37,12 +37,20 @@ class SoapPopsMixin:
     #   - no overlapping staging annotations
     #   - no conflicts in epoch-assignment
 
-    def _has_staging(self):
-        if not hasattr(self, "p"): return False
+    def _has_staging(self, require_multiple = True ):
+
+
+        if not hasattr(self, "p"):
+            return False
 
         # CONTAINS stages allows for possible conflicting stages
-        res = self.p.silent_proc( 'CONTAINS stages' )
-        df = self.p.table( 'CONTAINS' )
+        try:
+            res = self.p.silent_proc('CONTAINS stages')
+            df = self.p.table( 'CONTAINS' )
+        except Exception:
+            return False
+
+            
         if 'df' in locals() and isinstance(df, pd.DataFrame) and not df.empty:
 
             # no staging info
@@ -54,8 +62,9 @@ class SoapPopsMixin:
                 return False
 
             # fewer than 2 unique stages
-            if 'UNIQ_STAGES' in df.columns and len(df) == 1 and df.at[df.index[0], 'UNIQ_STAGES'] < 2:
-                return False
+            if require_multiple:
+                if 'UNIQ_STAGES' in df.columns and len(df) == 1 and df.at[df.index[0], 'UNIQ_STAGES'] < 2:
+                    return False
 
             # any conflicts (will generate an 'E' table) 
             df2 = self.p.table( 'CONTAINS' , 'E' )
@@ -96,15 +105,21 @@ class SoapPopsMixin:
         
         
     def _update_soap_list(self):
+        print (' in update soap' )
         if not hasattr(self, "p"): return
+
         # list all channels with sample frequencies > 32 Hz 
         df = self.p.headers()
 
+        print('df',df)
+        
         if df is not None:
             chs = df.loc[df['SR'] >= 32, 'CH'].tolist()
         else:
             chs = [ ]
-            
+
+        print (' in update soap, chs' , chs )
+        
         self.ui.combo_soap.addItems( chs )
         self.ui.combo_pops.addItems( chs )
 
@@ -115,10 +130,13 @@ class SoapPopsMixin:
     def _calc_soap(self):
 
         # requires attached individal
-        if not hasattr(self, "p"): return
+        if not hasattr(self, "p"):
+            QMessageBox.critical( self.ui , "Error", "No instance attached" )
+            return
         
         # requires staging
         if not self._has_staging():
+            QMessageBox.critical( self.ui , "Error", "No valid stating information:\n overlaps, epoch conflicts, or fewer than 2 valid stages" )
             return
 
         # paraters
@@ -163,7 +181,9 @@ class SoapPopsMixin:
 
     def _calc_pops(self):
       
-        if not hasattr(self, "p"): return
+        if not hasattr(self, "p"):
+            QMessageBox.critical( self.ui , "Error", "No instance attached" )
+            return
         
         # parameters
         pops_chs = self.ui.combo_pops.currentText()
@@ -210,7 +230,7 @@ class SoapPopsMixin:
                 f"Exception: {type(e).__name__}: {e}"
             )
 
-
+        
         # outputs
 
         df1 = self.p.table( 'RUN_POPS' )
@@ -259,3 +279,11 @@ class SoapPopsMixin:
         hypno( df.PRED , ax=self.popshypnocanvas.ax)
         self.popshypnocanvas.draw_idle()
 
+        # new annotations will have been added (N1, N2, ..., or pN1, pN2, ... if staging already exists)
+        # --> update hypnogram
+        self._update_metrics()
+        self._update_mask_list()
+        # if no original staging
+        if not has_staging:
+            self._render_hypnogram()
+            self._update_hypnogram()

@@ -28,15 +28,15 @@ from PySide6.QtWidgets import QFileDialog, QHeaderView, QAbstractItemView
 from PySide6.QtCore import Qt, QDir, QRegularExpression, QSortFilterProxyModel
 from PySide6.QtGui import QStandardItemModel, QStandardItem
 
+from .tbl_funcs import attach_comma_filter
+
 class SListMixin:
 
     def _init_slist(self):
-        # for filtering the slist table
-        self._proxy = QSortFilterProxyModel( self.ui.tbl_slist )
-        self._proxy.setFilterRole(Qt.DisplayRole)
-        self._proxy.setFilterKeyColumn(-1)  # all columns
-        self.ui.tbl_slist.setModel(self._proxy)
 
+        # attach comma-delimited OR filter
+        self._proxy = attach_comma_filter( self.ui.tbl_slist , self.ui.flt_slist )
+        
         # wire buttons
         self.ui.butt_load_slist.clicked.connect(self.open_file)
         self.ui.butt_build_slist.clicked.connect(self.open_folder)
@@ -44,18 +44,9 @@ class SListMixin:
         self.ui.butt_load_annot.clicked.connect(lambda _checked=False: self.open_annot())
         self.ui.butt_refresh.clicked.connect(self._refresh)
         
-        # filter SL
-        self.ui.flt_slist.textChanged.connect( self._on_filter_text)
-
         # wire select ID from slist --> load
         self.ui.tbl_slist.selectionModel().currentRowChanged.connect( self._attach_inst )
         
-
-    # wire filter for slists
-    def _on_filter_text(self, t: str):
-        rx = QRegularExpression(QRegularExpression.escape(t))
-        rx.setPatternOptions(QRegularExpression.CaseInsensitiveOption)
-        self._proxy.setFilterRegularExpression(rx)
         
 
     # ------------------------------------------------------------
@@ -197,9 +188,9 @@ class SListMixin:
             # and prgrammatically select this first row
             model = self.ui.tbl_slist.model()
             if model and model.rowCount() > 0:
-                self.ui.tbl_slist.selectRow(0)
-                idx = model.index(0, 0)
-                self._attach_inst(idx, None)
+                proxy_idx = model.index(0, 0)
+                self.ui.tbl_slist.setCurrentIndex(proxy_idx)
+                self.ui.tbl_slist.selectRow(0)              
             
 
     # ------------------------------------------------------------
@@ -273,9 +264,10 @@ class SListMixin:
             # and prgrammatically select this first row
             model = self.ui.tbl_slist.model()
             if model and model.rowCount() > 0:
-                self.ui.tbl_slist.selectRow(0)
-                idx = model.index(0, 0)
-                self._attach_inst(idx, None)
+                proxy_idx = model.index(0, 0)
+                self.ui.tbl_slist.setCurrentIndex(proxy_idx)
+                self.ui.tbl_slist.selectRow(0)              
+
 
                 
     # ------------------------------------------------------------

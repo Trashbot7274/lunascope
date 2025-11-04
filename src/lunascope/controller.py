@@ -135,30 +135,8 @@ class Controller( QMainWindow,
         # set up menu: about
         act_about = QAction("Help", self)
 
-        act_about.triggered.connect(
-            lambda: (
-                lambda box=QMessageBox(self): (
-                    box.setWindowTitle("About Lunascope"),
-                    box.setIcon(QMessageBox.Information),
-                    box.setTextFormat(Qt.RichText),
-                    box.setText(
-                        f"<p>Lunascope v{__version__}</p>"
-                        "<p>Documentation:<br> <a href='http://zzz-luna.org/lunascope'>"
-                        "http://zzz-luna.org/lunascope</a></p>"
-                        "<p>Created by Shaun Purcell</p>"
-                        "<p>Developed and maintained by Lorcan Purcell</p>"
-                    ),
-                    box.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding),
-                    box.layout().setSizeConstraint(QLayout.SetMinimumSize),
-                    (
-                        lambda lbl=box.findChild(QLabel): lbl.setOpenExternalLinks(True)
-                        if lbl else None
-                    )(),
-                    box.exec()
-                )
-            )()
-        )
-
+        act_about.triggered.connect( self.show_about )
+        
         # palette menu
         act_pal_spectrum = QAction("Spectrum", self)
         act_pal_white    = QAction("White", self)
@@ -176,7 +154,7 @@ class Controller( QMainWindow,
         act_pal_random.triggered.connect(self._set_random_palette)
         act_pal_load.triggered.connect(self._load_palette)
         act_pal_load.triggered.connect(self._set_bespoke_palette)
-        act_pal_user.triggered.connect(self._user_palette)
+        act_pal_user.triggered.connect(self._select_user_palette)
         
         self.ui.menuPalettes.addAction(act_pal_spectrum)
         self.ui.menuPalettes.addAction(act_pal_white)
@@ -202,7 +180,6 @@ class Controller( QMainWindow,
         self.ui.dock_help.hide()
         self.ui.dock_console.hide()
         self.ui.dock_outputs.hide()
-        self.ui.dock_mask.hide()
         
         # arrange docks: lock and resize
         self.ui.setCorner(Qt.TopRightCorner,    Qt.RightDockWidgetArea)
@@ -211,8 +188,8 @@ class Controller( QMainWindow,
         # arrange docks: lower docks (console/output)
         w = self.ui.width()
 
-        self.ui.resizeDocks([ self.ui.dock_mask, self.ui.dock_console , self.ui.dock_outputs ],
-                            [ int(w*0.1), int(w*0.5), int(w*0.4)], Qt.Horizontal)
+        self.ui.resizeDocks([ self.ui.dock_console , self.ui.dock_outputs ],
+                            [ int(w*0.6), int(w*0.4)], Qt.Horizontal)
 
         # arrange docks: left docks (samples, settings)
         self.ui.resizeDocks([ self.ui.dock_slist , self.ui.dock_settings ],
@@ -221,8 +198,8 @@ class Controller( QMainWindow,
         
         # arrange docks: right docks (signals, annots, events)
         h = self.ui.height()
-        self.ui.resizeDocks([ self.ui.dock_sig, self.ui.dock_annot, self.ui.dock_annots ] , 
-                            [  int(h*0.4), int(h*0.3), int(h*0.1) ],
+        self.ui.resizeDocks([ self.ui.dock_sig, self.ui.dock_annot, self.ui.dock_annots , self.ui.dock_mask ] , 
+                            [  int(h*0.35), int(h*0.25), int(h*0.1) , int(h*0.1) ],
                             Qt.Vertical)
         w_right = 380
         self.ui.resizeDocks([self.ui.dock_slist, self.ui.dock_sig], [self.width()-w_right, w_right], Qt.Horizontal)
@@ -322,18 +299,20 @@ class Controller( QMainWindow,
         self._update_metrics()
         self._render_hypnogram()
         self._update_spectrogram_list()
+        self._update_mask_list()
         self._update_soap_list()
         self._update_params()
-        
+
         # initially, no signals rendered / not rendered / not current
         self._set_render_status( False , False )
 
         # draw
         self._render_signals_simple()
-
+                
         # hypnogram + stats if available
         self._calc_hypnostats()
 
+        
     # ------------------------------------------------------------
     #
     # clear for a new record
@@ -521,6 +500,31 @@ class Controller( QMainWindow,
         self.acolors = self._update_stage_cols( self.acolors , anns )
         self._update_cols()
 
+    def _select_user_palette(self):
+        self.palset = 'user'
+        self.c1, self.c2 = pick_two_colors()
+        self.ui.pg1.setBackground(self.c1)
+        nchan = len( self.ui.tbl_desc_signals.checked() )
+        self.colors = [self.c2] * nchan
+        anns = self.ui.tbl_desc_annots.checked()
+        nanns = len( anns )
+        self.acolors = [self.c2] * nanns
+        self.acolors = self._update_stage_cols( self.acolors , anns )
+        self._update_cols()
+
+    def _set_user_palette(self):
+        self.palset = 'user'
+        # assume self.c1 and self.c2 already set
+        #self.c1, self.c2 = pick_two_colors()
+        self.ui.pg1.setBackground(self.c1)
+        nchan = len( self.ui.tbl_desc_signals.checked() )
+        self.colors = [self.c2] * nchan
+        anns = self.ui.tbl_desc_annots.checked()
+        nanns = len( anns )
+        self.acolors = [self.c2] * nanns
+        self.acolors = self._update_stage_cols( self.acolors , anns )
+        self._update_cols()
+        
     def _set_bespoke_palette(self):        
         # back default black (i.e. for things not seen)
         self._set_black_palette()
@@ -591,15 +595,32 @@ class Controller( QMainWindow,
         for c, col in zip(self.annot_curves, self.acolors):
             c.setPen(pg.mkPen(col, width=1, cosmetic=True))
 
+                
         
-    def _user_palette(self):
-        self.palset = 'user'
-        self.c1, self.c2 = pick_two_colors()
-        self.ui.pg1.setBackground(self.c1)
-        nchan = len( self.ss_chs )
-        self.colors = [self.c2] * nchan
-        nanns = len( self.ss_anns )
-        self.acolors = [self.c2] * nchan
-        self.acolors = self._update_stage_cols( self.acolors , self.ss_anns )
+    def show_about(self):
+        box = QMessageBox(self)
+        box.setWindowTitle("About Lunascope")
+        box.setIcon(QMessageBox.Information)
+        box.setTextFormat(Qt.RichText)
 
+        # compute versions
+        x = lp.version()  # { lunapi:ver, luna:ver }
+        box.setText(
+            f"<p>Lunascope v{__version__}</p>"
+            f"<p>Lunapi {x['lunapi']}</p>"
+            f"<p>Luna {x['luna']}</p>"
+            "<p>Documentation:<br> <a href='http://zzz-luna.org/lunascope'>"
+            "http://zzz-luna.org/lunascope</a></p>"
+            "<p>Created by Shaun Purcell</p>"
+            "<p>Developed and maintained by Lorcan Purcell</p>"
+        )
+
+        box.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        box.layout().setSizeConstraint(QLayout.SetMinimumSize)
+
+        lbl = box.findChild(QLabel)
+        if lbl:
+            lbl.setOpenExternalLinks(True)
+
+        box.exec()
 

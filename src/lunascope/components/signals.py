@@ -87,7 +87,8 @@ class SignalsMixin:
         self.ui.radio_empiric.clicked.connect( self._update_scaling )
         self.ui.check_labels.clicked.connect( self._update_labels )
         
-
+        self.last_x1 = 0
+        self.last_x2 = 30
 
         
     # --------------------------------------------------------------------------------
@@ -259,6 +260,8 @@ class SignalsMixin:
     # --------------------------------------------------------------------------------
 
     def _update_hypnogram(self):
+
+        print( '_update_hypnogram()' )
         
         # writes on the same canvas as the hypnogram above, but only updates the
         # stuff that may change
@@ -272,18 +275,17 @@ class SignalsMixin:
         stgs = [ 'N1' , 'N2' , 'N3' , 'R' , 'W' , '?' , 'L' ] 
         stg_evts = self.p.fetch_annots( stgs , 30 )
 
-
         # check stagiung for problems
 
-        has_staging = self._has_staging()
-
-        if not has_staging:
-            QMessageBox.critical(
-                None,
-                "No valid staging",
-                "Note: no valid staging found\ncheck your data (including possible overlaps & epoch misalignment)"
-            )
-            return
+        has_staging = self._has_staging( False ) # F = do not require >1 stage
+        
+#        if not has_staging:
+#            QMessageBox.critical(
+#                None,
+#                "No valid staging",
+#                "Note: no valid staging found\ncheck your data (including possible overlaps & epoch misalignment)"
+#            )
+#            return
         
         # get staging (in units no larger than 30 seconds)
         # use STAGES here so that we only get the unmasked datapoints
@@ -497,7 +499,8 @@ class SignalsMixin:
 #        times = np.concatenate((tstarts, tstops), axis=1)
 
         # ready to view
-        self.ss.window(0,30)        
+        self.ss.window( self.last_x1, self.last_x2)
+
         self._update_scaling()
         self._update_pg1()
 
@@ -823,6 +826,10 @@ class SignalsMixin:
         x1 = self.ss.get_window_left()
         x2 = self.ss.get_window_right()
 
+        # store for any updates
+        self.last_x1 = x1
+        self.last_x2 = x2
+        
         # get canvas
         pw = self.ui.pg1
         vb = pw.getPlotItem().getViewBox()
@@ -893,7 +900,7 @@ class SignalsMixin:
         gaps = self.ss.get_gaps()
         x0 =  [ x[0] for x in gaps ]
         x1 =  [ x[1] for x in gaps ]
-        y0 =  [ 0.04 for x in gaps ]
+        y0 =  [ 0.01 for x in gaps ]
         y1 =  [ 0.96 for x in gaps ]
         gaps = self.annot_mgr.update_track( "__#gaps__" ,x0 = x0 , x1 = x1 , y0 = y0 , y1 = y1 )
             
@@ -948,9 +955,14 @@ class SignalsMixin:
 
         # if 1+ signals, do not allow large windows
         if len(chs) != 0 and x2 - x1 > 30:
-            self.sel.setRange(x1, x1+30)
+            # will be 38
+            self.sel.setRange(x1+4, x1+30+4)
             return
         
+        # store for any updates
+        self.last_x1 = x1
+        self.last_x2 = x2
+
         # get canvas
         pw = self.ui.pg1
         vb = pw.getPlotItem().getViewBox()
@@ -1055,7 +1067,7 @@ class SignalsMixin:
         gaps = self.ssa.get_gaps()
         x0 =  [ x[0] for x in gaps ]
         x1 =  [ x[1] for x in gaps ]
-        y0 =  [ 0.04 for x in gaps ]
+        y0 =  [ 0.01 for x in gaps ]
         y1 =  [ 0.96 for x in gaps ]
         gaps = self.annot_mgr.update_track( "__#gaps__" ,x0 = x0 , x1 = x1 , y0 = y0 , y1 = y1 )
             

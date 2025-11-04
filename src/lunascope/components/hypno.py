@@ -48,10 +48,14 @@ class HypnoMixin:
         self.hypnocanvas.figure.canvas.draw_idle()
         
         # test if we have somebody attached        
-        if not hasattr(self, "p"): return
+        if not hasattr(self, "p"):
+            QMessageBox.critical( self.ui , "Error", "No instance selected")
+            return
 
         # who has at least some staging available
-        if not self._has_staging(): return
+        if not self._has_staging():
+            QMessageBox.critical( self.ui , "Error", "No staging information available" )
+            return
         
         # make hypnogram
         ss = self.p.stages()
