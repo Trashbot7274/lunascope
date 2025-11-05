@@ -742,10 +742,44 @@
          <number>0</number>
         </property>
         <item>
-         <widget class="QLineEdit" name="flt_table">
-          <property name="placeholderText">
-           <string>(enter terms to filter)</string>
+         <widget class="QFrame" name="frame_6">
+          <property name="frameShape">
+           <enum>QFrame::Shape::StyledPanel</enum>
           </property>
+          <property name="frameShadow">
+           <enum>QFrame::Shadow::Raised</enum>
+          </property>
+          <layout class="QHBoxLayout" name="horizontalLayout_30">
+           <property name="spacing">
+            <number>0</number>
+           </property>
+           <property name="leftMargin">
+            <number>0</number>
+           </property>
+           <property name="topMargin">
+            <number>0</number>
+           </property>
+           <property name="rightMargin">
+            <number>0</number>
+           </property>
+           <property name="bottomMargin">
+            <number>0</number>
+           </property>
+           <item>
+            <widget class="QRadioButton" name="radio_transpose">
+             <property name="text">
+              <string>Transpose</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLineEdit" name="flt_table">
+             <property name="placeholderText">
+              <string>(enter terms to filter)</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
          </widget>
         </item>
         <item>

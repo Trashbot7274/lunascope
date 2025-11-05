@@ -95,6 +95,6 @@ class MasksMixin:
         self._update_metrics()
         self._update_pg1()
         
-        self.ui.tbl_desc_signals.set( self.curr_chs )
-        self.ui.tbl_desc_annots.set( self.curr_anns )
+        self.ui.tbl_desc_signals.set_checked_by_labels( self.curr_chs )
+        self.ui.tbl_desc_annots.set_checked_by_labels( self.curr_anns )
         self._update_instances( self.curr_anns )

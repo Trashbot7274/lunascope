@@ -48,7 +48,8 @@ class AnalMixin:
         self.ui.butt_anal_save.clicked.connect( self._save_luna )
 
         self.ui.butt_anal_clear.clicked.connect( self._clear_luna )
-
+        
+        self.ui.radio_transpose.toggled.connect( self._on_radio_transpose_changed)
         
         # tree 'destrat' view
 
@@ -220,8 +221,8 @@ class AnalMixin:
         self._update_soap_list()
 
         # reset any prior selections
-        self.ui.tbl_desc_signals.set( self.curr_chs )
-        self.ui.tbl_desc_annots.set( self.curr_anns )
+        self.ui.tbl_desc_signals.set_checked_by_labels( self.curr_chs )
+        self.ui.tbl_desc_annots.set_checked_by_labels( self.curr_anns )
         self._update_instances( self.curr_anns )
 
 
@@ -288,6 +289,13 @@ class AnalMixin:
         tbl = self.results[ "_".join( [ cmd , stratum ] ) ]
         tbl = tbl.drop(columns=["ID"])
 
+        # transpose?
+        if self.ui.radio_transpose.isChecked():
+            tbl = tbl.T.reset_index()
+            tbl.rename(columns={"index": "VAR"}, inplace=True)
+            tbl.columns = ["VAR"] + [f"row{i}" for i in range(1, tbl.shape[1])]
+
+        
         model = self.df_to_model( tbl )
         # attach proxy to model
         self.anal_table_proxy = QSortFilterProxyModel(self)
@@ -314,6 +322,8 @@ class AnalMixin:
         self.anal_table_proxy.setFilterRegularExpression(rx)
         
 
+
+    
     # ------------------------------------------------------------
     # tree helpers
 
@@ -367,12 +377,43 @@ class AnalMixin:
         except TypeError:
             self._tree_sel.selectionChanged.connect(self._on_tree_sel)
 
-    def _on_tree_sel(self, selected: QItemSelection, _):
-        if not selected.indexes(): return
-        ix = selected.indexes()[0]
-        key  = ix.sibling(ix.row(), 0).data()
-        vals = ix.sibling(ix.row(), 1).data()
-        self._update_table( key , vals.replace( ", ", "_" ) )
+
+    # refactored  _on_tree_sel() 
+
+    def _current_key_vals(self):
+        sm = self.ui.anal_tables.selectionModel()
+        if not sm:
+            return None
+        ix = sm.currentIndex()
+        if not ix.isValid():
+            return None
+        r = ix.row()
+        key  = ix.sibling(r, 0).data()
+        vals = ix.sibling(r, 1).data()
+        return key, vals
+        
+    def _on_tree_sel(self, selected, _):
+        kv = self._current_key_vals()
+        if not kv:
+            return
+        key, vals = kv
+        self._update_table(key, vals.replace(", ", "_"))
+
+    def _on_radio_transpose_changed(self, checked):
+        # call on any toggle, or guard if you only care about checked=True
+        kv = self._current_key_vals()
+        if not kv:
+            return
+        key, vals = kv
+        self._update_table(key, vals.replace(", ", "_"))
+
+    # OLD
+    # def _on_tree_sel(self, selected: QItemSelection, _):
+    #     if not selected.indexes(): return
+    #     ix = selected.indexes()[0]
+    #     key  = ix.sibling(ix.row(), 0).data()
+    #     vals = ix.sibling(ix.row(), 1).data()
+    #     self._update_table( key , vals.replace( ", ", "_" ) )
 
 
 
