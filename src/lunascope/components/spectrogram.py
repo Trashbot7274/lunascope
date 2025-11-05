@@ -105,6 +105,19 @@ class SpecMixin:
 
     
     def _calc_spectrogram(self):
+
+        # requires attached individal
+        if not hasattr(self, "p"):
+            QMessageBox.critical( self.ui , "Error", "No instance attached" )
+            return
+
+        # requires 1+ channel
+        count = self.ui.combo_spectrogram.model().rowCount()
+        if count == 0:
+            QMessageBox.critical( self.ui , "Error", "No suitable signal for a spectrogram" )
+            return
+
+        # channel must exist in EDF (should always be the case)
         ch = self.ui.combo_spectrogram.currentText()
         if ch not in self.p.edf.channels():
             return
@@ -209,11 +222,26 @@ class SpecMixin:
     # Caclculate a Hjorth plot        
 
     def _calc_hjorth(self):
+        
+        # requires attached individal
+        if not hasattr(self, "p"):
+            QMessageBox.critical( self.ui , "Error", "No instance attached" )
+            return
+
+        # requires 1+ channel
+        count = self.ui.combo_spectrogram.model().rowCount()
+        if count == 0:
+            QMessageBox.critical( self.ui , "Error", "No suitable signal for a Hjorth-plot" )
+            return
+
+        # get channel
         ch = self.ui.combo_spectrogram.currentText()
 
         # check it still exists in the in-memory EDF                                          
         if ch not in self.p.edf.channels():
             return
 
+        # do plot
         plot_hjorth( ch , ax=self.spectrogramcanvas.ax , p = self.p , gui = self.ui )
+
         self.spectrogramcanvas.draw_idle()

@@ -33,6 +33,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QDockWidget, QLabel, QFrame, QSizePolicy, QMessageBox, QLayout
 from PySide6.QtWidgets import QMainWindow, QProgressBar, QTableView, QAbstractItemView
 from PySide6.QtWidgets import QFileDialog
+from PySide6.QtWidgets import QSplitter, QVBoxLayout, QWidget
 
 import pyqtgraph as pg
 
@@ -172,7 +173,28 @@ class Controller( QMainWindow,
 
         # window title
         self.ui.setWindowTitle(f"Lunascope v{__version__}")
+
+        # add QSplitter for console
+        container = self.ui.console_splitter
+        layout = container.layout()  # that's your console_layout
+        splitter = QSplitter(Qt.Vertical)
+        self.ui.txt_out.setParent(None)
+        self.ui.txt_inp.setParent(None)
+        splitter = QSplitter(Qt.Vertical, container)
+        splitter.addWidget(self.ui.txt_out)
+        splitter.addWidget(self.ui.txt_inp)
+        layout.addWidget(splitter)
         
+        # add QSplitter for output
+        container2 = self.ui.anal_out_frame
+        layout2 = container2.layout()  # that's your console_layout
+        self.ui.anal_tables.setParent(None)
+        self.ui.anal_right_table.setParent(None)
+        splitter2 = QSplitter(Qt.Horizontal, container2)
+        splitter2.addWidget(self.ui.anal_tables)
+        splitter2.addWidget(self.ui.anal_right_table)
+        layout2.addWidget(splitter2)
+
         # short keyboard cuts
         add_dock_shortcuts( self.ui, self.ui.menuView )
 
@@ -290,7 +312,7 @@ class Controller( QMainWindow,
                 f"Problem attaching individual {id_str}\nError:\n{e}",
             )
             return
-            
+
         # initiate graphs
         self.curves = [ ]
         self.annot_curves = [ ] 
@@ -308,7 +330,7 @@ class Controller( QMainWindow,
 
         # draw
         self._render_signals_simple()
-                
+
         # hypnogram + stats if available
         self._calc_hypnostats()
 
@@ -326,7 +348,6 @@ class Controller( QMainWindow,
 
         if getattr(self, "anal_table_proxy", None) is not None:
             clear_rows( self.anal_table_proxy , keep_headers = False )
-
 
         #clear_rows( self.ui.tbl_desc_signals )
         #clear_rows( self.ui.tbl_desc_annots )

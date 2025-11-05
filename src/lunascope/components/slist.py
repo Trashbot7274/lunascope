@@ -28,6 +28,10 @@ from PySide6.QtWidgets import QFileDialog, QHeaderView, QAbstractItemView
 from PySide6.QtCore import Qt, QDir, QRegularExpression, QSortFilterProxyModel
 from PySide6.QtGui import QStandardItemModel, QStandardItem
 
+import pandas as pd
+import numpy as np
+from pandas.api.types import is_numeric_dtype, is_integer_dtype
+
 from .tbl_funcs import attach_comma_filter
 
 class SListMixin:
@@ -270,12 +274,15 @@ class SListMixin:
 
 
                 
+
+
+
     # ------------------------------------------------------------
     # Populate sample-list table
     # ------------------------------------------------------------
 
     @staticmethod
-    def df_to_model(df) -> QStandardItemModel:
+    def OLD_df_to_model(df) -> QStandardItemModel:
         m = QStandardItemModel(df.shape[0], df.shape[1])
         m.setHorizontalHeaderLabels([str(c) for c in df.columns])
         for r in range(df.shape[0]):
@@ -286,4 +293,103 @@ class SListMixin:
                 m.setItem(r, c, QStandardItem(s))
         #m.setVerticalHeaderLabels([str(i) for i in df.index])
         return m
+
+
+    @staticmethod
+    def coerce_numeric_df(
+        df: pd.DataFrame,
+        *,
+        decimals_default: int = 3,
+        decimals_per_col: dict[str, int] | None = None,
+        extra_missing: set[str] | None = None,
+    ) -> pd.DataFrame:
+        miss = {"", ".", "NA", "N/A", "NaN", "NAN"}
+        if extra_missing:
+            miss |= {s.upper() for s in extra_missing}
+        decs = decimals_per_col or {}
+
+        def is_listy(x): return isinstance(x, (list, tuple, set))
+
+        def clean_cell(x):
+            if x is None: return np.nan
+            if isinstance(x, float) and np.isnan(x): return np.nan
+            if isinstance(x, str):
+                xs = x.strip()
+                if xs == "" or xs.upper() in miss: return np.nan
+                return xs.replace(",", "")
+            return x
+
+        def series_to_numeric(s: pd.Series, name: str) -> pd.Series:
+            if s.map(is_listy).any():
+                return s  # leave list-like columns as-is
+
+            s2 = s.map(clean_cell)
+            num = pd.to_numeric(s2, errors="coerce")
+            nonmiss = ~s2.isna()
+
+            # some non-missing failed to parse => keep as text
+            if nonmiss.any() and num[nonmiss].isna().any():
+                return s2.astype(object)
+
+            # all missing => float column
+            if not nonmiss.any():
+                return num.astype(float)
+
+            # decide int vs float from fractional part
+            frac = np.abs(num - np.rint(num))
+            z = frac[nonmiss]
+            vmax = float(z.max(skipna=True)) if len(z) else 0.0
+            if not np.isfinite(vmax):  # all NaN after skipna
+                vmax = 0.0
+
+            if vmax == 0.0:
+                return num.round().astype("Int64")  # nullable int
+            else:
+                d = decs.get(name, decimals_default)
+                return num.astype(float).round(d)
+
+        out = df.copy()
+        for col in out.columns:
+            out[col] = series_to_numeric(out[col], col)
+        return out
+
+    @staticmethod
+    def df_to_model(
+        df: pd.DataFrame,
+        *,
+        float_decimals_default: int = 3,
+        float_decimals_per_col: dict[str, int] | None = None,
+    ) -> QStandardItemModel:
+        # Clean/round first
+        clean = SListMixin.coerce_numeric_df(
+            df,
+            decimals_default=float_decimals_default,
+            decimals_per_col=float_decimals_per_col,
+        )
+
+        model = QStandardItemModel(clean.shape[0], clean.shape[1])
+        model.setHorizontalHeaderLabels([str(c) for c in clean.columns])
+
+        for r in range(clean.shape[0]):
+            for c_idx, col in enumerate(clean.columns):
+                v = clean.iat[r, c_idx]
+                item = QStandardItem()
+
+                if pd.isna(v):
+                    item.setText("")
+                elif isinstance(v, (list, tuple, set)):
+                    item.setText(", ".join(map(str, v)))
+                elif pd.api.types.is_integer_dtype(clean[col].dtype):
+                    item.setText(str(int(v)))
+                    item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                elif pd.api.types.is_float_dtype(clean[col].dtype):
+                    digs = (float_decimals_per_col or {}).get(col, float_decimals_default)
+                    item.setText(f"{float(v):.{digs}f}")
+                    item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                else:
+                    item.setText(str(v))
+
+                model.setItem(r, c_idx, item)
+
+        return model
 

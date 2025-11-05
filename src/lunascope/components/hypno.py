@@ -54,7 +54,7 @@ class HypnoMixin:
 
         # who has at least some staging available
         if not self._has_staging():
-            QMessageBox.critical( self.ui , "Error", "No staging information available" )
+            QMessageBox.critical( self.ui , "Error", "No staging or invalid/overlapping staging" )
             return
         
         # make hypnogram
@@ -120,7 +120,7 @@ class HypnoMixin:
         view.setSortingEnabled(False)
         h = view.horizontalHeader()
         h.setSectionResizeMode(QHeaderView.Interactive)
-        h.setStretchLastSection(True)
+        h.setStretchLastSection(False)
         view.resizeColumnsToContents()
         view.horizontalHeader().setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
 
@@ -135,7 +135,7 @@ class HypnoMixin:
         view.setSortingEnabled(False)
         h = view.horizontalHeader()
         h.setSectionResizeMode(QHeaderView.Interactive)
-        h.setStretchLastSection(True)
+        h.setStretchLastSection(False)
         view.resizeColumnsToContents()
         view.horizontalHeader().setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         
@@ -150,7 +150,7 @@ class HypnoMixin:
         view.setSortingEnabled(False)
         h = view.horizontalHeader()
         h.setSectionResizeMode(QHeaderView.Interactive)
-        h.setStretchLastSection(True)
+        h.setStretchLastSection(False)
         view.resizeColumnsToContents()
         view.horizontalHeader().setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         

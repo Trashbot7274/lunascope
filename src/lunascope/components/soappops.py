@@ -38,8 +38,7 @@ class SoapPopsMixin:
     #   - no conflicts in epoch-assignment
 
     def _has_staging(self, require_multiple = True ):
-
-
+        
         if not hasattr(self, "p"):
             return False
 
@@ -105,21 +104,17 @@ class SoapPopsMixin:
         
         
     def _update_soap_list(self):
-        print (' in update soap' )
+
         if not hasattr(self, "p"): return
 
         # list all channels with sample frequencies > 32 Hz 
         df = self.p.headers()
 
-        print('df',df)
-        
         if df is not None:
             chs = df.loc[df['SR'] >= 32, 'CH'].tolist()
         else:
             chs = [ ]
 
-        print (' in update soap, chs' , chs )
-        
         self.ui.combo_soap.addItems( chs )
         self.ui.combo_pops.addItems( chs )
 
@@ -139,7 +134,13 @@ class SoapPopsMixin:
             QMessageBox.critical( self.ui , "Error", "No valid stating information:\n overlaps, epoch conflicts, or fewer than 2 valid stages" )
             return
 
-        # paraters
+        # requires 1+ channel
+        count = self.ui.combo_soap.model().rowCount()
+        if count == 0:
+            QMessageBox.critical( self.ui , "Error", "No suitable signal for SOAP" )
+            return
+
+        # parameters
         soap_ch = self.ui.combo_soap.currentText()
         soap_pc = self.ui.spin_soap_pc.value()
 
@@ -185,6 +186,12 @@ class SoapPopsMixin:
             QMessageBox.critical( self.ui , "Error", "No instance attached" )
             return
         
+        # requires 1+ channel
+        count = self.ui.combo_pops.model().rowCount()
+        if count == 0:
+            QMessageBox.critical( self.ui , "Error", "No suitable signal for POPS" )
+            return
+
         # parameters
         pops_chs = self.ui.combo_pops.currentText()
         if type( pops_chs ) is str: pops_chs = [ pops_chs ] 

@@ -382,3 +382,5 @@ def attach_comma_filter(table_view, line_edit, proxy=None):
     proxy.setFilterKeyColumn(-1)
     proxy.setFilterCaseSensitivity(Qt.CaseInsensitive)
     return proxy
+
+

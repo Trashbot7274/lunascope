@@ -275,17 +275,15 @@ class SignalsMixin:
         stgs = [ 'N1' , 'N2' , 'N3' , 'R' , 'W' , '?' , 'L' ] 
         stg_evts = self.p.fetch_annots( stgs , 30 )
 
-        # check stagiung for problems
+        # check staging for problems
 
         has_staging = self._has_staging( False ) # F = do not require >1 stage
-        
+
+        print( 'has staging' , has_staging )
 #        if not has_staging:
-#            QMessageBox.critical(
-#                None,
-#                "No valid staging",
-#                "Note: no valid staging found\ncheck your data (including possible overlaps & epoch misalignment)"
-#            )
-#            return
+#            print( 'no staging??')
+#            return 
+        
         
         # get staging (in units no larger than 30 seconds)
         # use STAGES here so that we only get the unmasked datapoints
@@ -296,10 +294,9 @@ class SignalsMixin:
             QMessageBox.critical(
                 None,
                 "Error running STAGE: checking for overlapping staging annotations",
-                f"Exception: {type(e).__name__}: {e}"
+                "Problem with annotations: check for overlapping stage annotations"
             )
             return
-
         
         if "EPOCH: E" in res:
             df1 = self.p.table( 'EPOCH' , 'E' )
@@ -323,6 +320,8 @@ class SignalsMixin:
         # merge
         df = pd.merge(df1, df2, on="E", how="inner")
 
+        print('df',df)
+        
         if len( df ) != 0:
             starts = df[ 'START' ].to_numpy()
             stops = df[ 'STOP' ].to_numpy()
@@ -403,7 +402,7 @@ class SignalsMixin:
 
         # update hypnogram and segment plot
         self._update_hypnogram()
-        
+
         # copy originally selected channels (i.e. as denominator
         # for subsequently drop in/out)
         self.ss_chs = self.ui.tbl_desc_signals.checked()
@@ -544,7 +543,7 @@ class SignalsMixin:
 
         # update hypnogram and segment plot
         self._update_hypnogram()
-
+        
         # get all checked channels
         self.ss_chs = self.ui.tbl_desc_signals.checked()
         self.ss_anns = self.ui.tbl_desc_annots.checked()
@@ -552,24 +551,10 @@ class SignalsMixin:
         # set palette
         self.set_palette()
         
-        #
-        # plot segments
-        #
-
-#        num_epochs = self.ssa.num_epochs()
-#        tscale = self.ssa.get_time_scale()
-#        tstarts = [ tscale[idx] for idx in range(0,len(tscale),2)]
-#        tstops = [ tscale[idx] for idx in range(1,len(tscale),2)]
-#        times = np.concatenate((tstarts, tstops), axis=1)
-
-        # initiate curves etc 
-
+        # initiate curves 
         self._initiate_curves()
 
-        #
         # ready view
-        #
-
         self.ssa.window(0,30)        
         self._update_scaling()
         self._update_pg1_simple()
