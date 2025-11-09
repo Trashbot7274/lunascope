@@ -128,6 +128,7 @@ class SpecMixin:
         self.sb_progress.setVisible(True)
         self.sb_progress.setRange(0, 0)
         self.sb_progress.setFormat("Running…")
+        self.lock_ui()
 
         # submit worker
         fut_spec = self._exec.submit(
@@ -159,6 +160,7 @@ class SpecMixin:
             xi, yi, zi = self._last_result 
             self._complete_spectrogram(xi, yi, zi)
         finally:
+            self.unlock_ui()
             self._busy = False
             self._buttons(True)
             self.sb_progress.setRange(0, 100)
@@ -171,6 +173,7 @@ class SpecMixin:
             from PySide6.QtWidgets import QMessageBox
             QMessageBox.critical(self, "Error deriving spectrogram", self._last_tb)
         finally:
+            self.unlock_ui()
             self._busy = False
             self._buttons(True)
             self.sb_progress.setRange(0, 100)

@@ -54,7 +54,8 @@ class HypnoMixin:
 
         # who has at least some staging available
         if not self._has_staging():
-            QMessageBox.critical( self.ui , "Error", "No staging or invalid/overlapping staging" )
+            if self.ui.radio_assume_staging.isChecked():
+                QMessageBox.critical( self.ui , "Error", "No staging or invalid/overlapping staging\n(uncheck Staging checkbox to turn this message off)" )
             return
         
         # make hypnogram
@@ -84,73 +85,68 @@ class HypnoMixin:
             s = dt.toString("dd/MM/yy-HH:mm:ss")
             cmd_str += " lights-on="+s
 
-            
+        # save currents channels/annots selections
+        # (needed by _render_tables() used below)
+        self.curr_chs = self.ui.tbl_desc_signals.checked()                   
+        self.curr_anns = self.ui.tbl_desc_annots.checked()
+
         # Luna call to get full HYPNO outputs
         try:
             res = self.p.silent_proc(cmd_str)
         except Exception as e:
             QMessageBox.critical(
-                self,
+                self.ui,
                 "Error",
                 f"Problem running HYPNO:\n{cmd_str}\nCommand failed:\n{e}",
             )
             return
 
-        # get outputs        
+        
+        # pull bespoke output for hypno dock
+        # (as _render_tables() wipes main output)
         df1 = self.p.table( 'HYPNO' )
         df2 = self.p.table( 'HYPNO' , 'SS' )
-        df3 = self.p.table( 'HYPNO' , 'C' )
-
-        # update annot list?
-        if self.ui.check_hypno_annots.isChecked():
-            self._update_metrics()
-       
+        #df3 = self.p.table( 'HYPNO' , 'C' )
+        
         # possible that df2 and df3 will be empty - i.e. if only W
         
         # populate tables
-        if df1.empty: return
-        df1 = df1.T.reset_index()
-        df1.columns = ["Variable", "Value"]        
-        df1 = df1[df1.iloc[:, 0] != "ID"]
-        model = self.df_to_model( df1 )
-        self.ui.tbl_hypno1.setModel( model )
-        view = self.ui.tbl_hypno1
-        view.verticalHeader().setVisible(False)
-        view.resizeColumnsToContents()
-        view.setSortingEnabled(False)
-        h = view.horizontalHeader()
-        h.setSectionResizeMode(QHeaderView.Interactive)
-        h.setStretchLastSection(False)
-        view.resizeColumnsToContents()
-        view.horizontalHeader().setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        if not df1.empty: 
 
+            df1 = df1.T.reset_index()
+            df1.columns = ["Variable", "Value"]        
+            df1 = df1[df1.iloc[:, 0] != "ID"]
+
+            v_TST = df1.loc[df1["Variable"] == "TST", "Value"].squeeze()
+            self.ui.hyp_TST.setText( f"TST : {v_TST} mins" )
+        
+            v_WASO = df1.loc[df1["Variable"] == "WASO", "Value"].squeeze()
+            self.ui.hyp_WASO.setText( f"WASO : {v_WASO} mins" )
+
+            
         # populate stage table
-        if df2.empty: return
-        df2 = df2.drop(columns=["ID"])
-        model = self.df_to_model( df2 )
-        self.ui.tbl_hypno2.setModel( model )
-        view = self.ui.tbl_hypno2
-        view.verticalHeader().setVisible(False)
-        view.resizeColumnsToContents()
-        view.setSortingEnabled(False)
-        h = view.horizontalHeader()
-        h.setSectionResizeMode(QHeaderView.Interactive)
-        h.setStretchLastSection(False)
-        view.resizeColumnsToContents()
-        view.horizontalHeader().setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        
-        # populate cycle table
-        if df3.empty: return
-        df3 = df3.drop(columns=["ID"])
-        model = self.df_to_model( df3 )
-        self.ui.tbl_hypno3.setModel(model)
-        view = self.ui.tbl_hypno3
-        view.verticalHeader().setVisible(False)
-        view.resizeColumnsToContents()
-        view.setSortingEnabled(False)
-        h = view.horizontalHeader()
-        h.setSectionResizeMode(QHeaderView.Interactive)
-        h.setStretchLastSection(False)
-        view.resizeColumnsToContents()
-        view.horizontalHeader().setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        
+        if not df2.empty: 
+            df = df2.drop(columns=["ID"])
+
+            mins_n1 = df.loc[df["SS"] == "N1", "MINS"].squeeze() if "N1" in df["SS"].values else 0
+            mins_n2 = df.loc[df["SS"] == "N2", "MINS"].squeeze() if "N2" in df["SS"].values else 0
+            mins_n3 = df.loc[df["SS"] == "N3", "MINS"].squeeze() if "N3" in df["SS"].values else 0
+            mins_r  = df.loc[df["SS"] == "R", "MINS"].squeeze() if "R" in df["SS"].values else 0
+            
+            p_n1 = 100 * df.loc[df["SS"] == "N1", "PCT"].squeeze() if "N1" in df["SS"].values else 0
+            p_n2 = 100 * df.loc[df["SS"] == "N2", "PCT"].squeeze() if "N2" in df["SS"].values else 0
+            p_n3 = 100 * df.loc[df["SS"] == "N3", "PCT"].squeeze() if "N3" in df["SS"].values else 0
+            p_r  = 100 * df.loc[df["SS"] == "R",  "PCT"].squeeze() if "R" in df["SS"].values else 0
+
+            self.ui.hyp_N1.setText( f"N1 : {mins_n1:.1f} mins ({p_n1:.1f}%)" )
+            self.ui.hyp_N2.setText( f"N2 : {mins_n2:.1f} mins ({p_n2:.1f}%)" )
+            self.ui.hyp_N3.setText( f"N3 : {mins_n3:.1f} mins ({p_n3:.1f}%)" )
+            self.ui.hyp_R.setText( f"R : {mins_r:.1f} mins ({p_r:.1f}%)" )
+
+            
+        # finally, use standard output mechanism to show full output
+        # this will also update annotations if any added by the hypno
+        # run
+
+        tbls = self.p.strata()
+        self._render_tables( tbls )

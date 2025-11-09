@@ -89,33 +89,36 @@ class MetricsMixin:
         
         # signal table
         view = self.ui.tbl_desc_signals
-        view.setSortingEnabled(True)
+
+        view.setSortingEnabled(False)
         h = view.horizontalHeader()
-        h.setSectionResizeMode(QHeaderView.Interactive)  
+        h.setMinimumSectionSize(20)   	
         h.setStretchLastSection(False)
-        h.setMinimumSectionSize(50)
-        h.setDefaultSectionSize(150)
+        h.setSectionResizeMode(QHeaderView.ResizeToContents)
         view.resizeColumnsToContents()
+        h.setSectionResizeMode(QHeaderView.ResizeToContents)
+        QTimer.singleShot(0, lambda: h.setSectionResizeMode(QHeaderView.Interactive))
         view.setSelectionBehavior(QAbstractItemView.SelectRows)
         view.setSelectionMode(QAbstractItemView.SingleSelection)
         view.horizontalHeader().setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         view.verticalHeader().setVisible(False)
-                
+        
         # annots table
 
         view = self.ui.tbl_desc_annots
-        view.setSortingEnabled(True)
+        view.setSortingEnabled(False)
         h = view.horizontalHeader()
-        h.setSectionResizeMode(QHeaderView.Interactive)
+        h.setMinimumSectionSize(20)
         h.setStretchLastSection(False)
-        h.setMinimumSectionSize(50)
-        h.setDefaultSectionSize(150)
+        h.setSectionResizeMode(QHeaderView.ResizeToContents)
         view.resizeColumnsToContents()
+        h.setSectionResizeMode(QHeaderView.ResizeToContents)
+        QTimer.singleShot(0, lambda: h.setSectionResizeMode(QHeaderView.Interactive))
         view.setSelectionBehavior(QAbstractItemView.SelectRows)
         view.setSelectionMode(QAbstractItemView.SingleSelection)
         view.horizontalHeader().setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         view.verticalHeader().setVisible(False)
-                
+
         # wiring
         self.ui.butt_sig.clicked.connect( self._toggle_sigs )
         self.ui.butt_annot.clicked.connect( self._toggle_annots )
@@ -126,8 +129,7 @@ class MetricsMixin:
         if n == 0:
             self.ui.tbl_desc_signals.select_all_checks()
         else:
-            self.ui.tbl_desc_signals.select_none_checks()        
-        self._update_pg1()
+            self.ui.tbl_desc_signals.select_none_checks()
 
     def _toggle_annots(self):
         n = len(self.ui.tbl_desc_annots.checked())
@@ -135,8 +137,6 @@ class MetricsMixin:
             self.ui.tbl_desc_annots.select_all_checks()
         else:
             self.ui.tbl_desc_annots.select_none_checks()
-        self._update_pg1()
-
         
     def all_labels(self,view):
         m = view.model()
@@ -157,7 +157,7 @@ class MetricsMixin:
         try:
             edf_ne = df.iloc[0, df.columns.get_loc('NE')]
         except KeyError:
-            QMessageBox.critical(self, "Problem", "Likely no unmasked epochs left\nGoing to refresh the EDF" )
+            QMessageBox.critical(self.ui, "Problem", "Likely no unmasked epochs left\nGoing to refresh the EDF" )
             self._refresh()
             return        
         
@@ -221,23 +221,26 @@ class MetricsMixin:
         # View config
         view.setSortingEnabled(False)
         h = view.horizontalHeader()
-        h.setSectionResizeMode(QHeaderView.Interactive)
-        h.setStretchLastSection(False)
-        h.setMinimumSectionSize(50)
-        h.setDefaultSectionSize(150)
-        view.resizeColumnsToContents()
+        h.setMinimumSectionSize(20)                 
+        h.setStretchLastSection(False)              
+        h.setSectionResizeMode(QHeaderView.ResizeToContents)
+        view.resizeColumnsToContents()              
+        h.setSectionResizeMode(QHeaderView.ResizeToContents)
+        QTimer.singleShot(0, lambda: h.setSectionResizeMode(QHeaderView.Interactive))
         view.setSelectionBehavior(QAbstractItemView.SelectRows)
         view.setSelectionMode(QAbstractItemView.SingleSelection)
         view.horizontalHeader().setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         view.verticalHeader().setVisible(False)
 
+
+        
         # Add virtual checkbox column (unchanged)
         add_check_column(
             view,
             channel_col_before_insert=0,
             header_text="Sel",
             initial_checked=[],
-            on_change=lambda _: (self._clear_pg1(), self._update_scaling(), self._update_pg1()),
+            on_change=lambda _: (self._clear_pg1(), self._update_scaling() ),
         )
 
         # --- minimal change start: make a real model column for the combo and bind a delegate ---
@@ -341,10 +344,13 @@ class MetricsMixin:
                     order = 2
                     sos = butter(order, frqs, btype='band', fs=sr, output='sos')
                     self.ss.apply_filter(ch_label, sos.reshape(-1))
+                else:
+                    self.fmap.pop(ch_label, None)
+                    self.ss.clear_filter(ch_label)
 
             self._clear_pg1()
-            self._update_scaling()
-            self._update_pg1()
+            self._update_scaling() # calls _update_pg1() 
+
 
         # add wiring
         src_sig.dataChanged.connect(on_sig_changed)
@@ -499,19 +505,16 @@ class MetricsMixin:
         # View config
         view.setSortingEnabled(False)
         h = view.horizontalHeader()
-        h.setSectionResizeMode(QHeaderView.Interactive)
-        h.setStretchLastSection(True)
-        h.setMinimumSectionSize(50)
-        h.setDefaultSectionSize(150)
+        h.setMinimumSectionSize(20)
+        h.setStretchLastSection(False)
+        h.setSectionResizeMode(QHeaderView.ResizeToContents)
         view.resizeColumnsToContents()
+        h.setSectionResizeMode(QHeaderView.ResizeToContents)
+        QTimer.singleShot(0, lambda: h.setSectionResizeMode(QHeaderView.Interactive))
         view.setSelectionBehavior(QAbstractItemView.SelectRows)
         view.setSelectionMode(QAbstractItemView.SingleSelection)
         view.horizontalHeader().setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         view.verticalHeader().setVisible(False)
-
-        # hook a filter box 
-#        self.ui.txt_annots.textChanged.connect(self.annots_table_proxy.setFilterFixedString)
-#        self.annots_table_proxy.setFilterCaseSensitivity(Qt.CaseInsensitive)
 
         # Add checkbox column; index is SOURCE column before insertion
         add_check_column(
@@ -522,8 +525,7 @@ class MetricsMixin:
             on_change=lambda anns: (
                 self._update_instances(anns),
                 self._clear_pg1(),
-                self._update_scaling(),
-                self._update_pg1()
+                self._update_scaling()
             ),
         )
 
@@ -542,6 +544,7 @@ class MetricsMixin:
         self.ssa = lp.segsrv( self.p )
         self.ssa.populate( chs = [ ] , anns = self.ssa_anns )
         self.ssa.set_annot_format6( False )  # pyqtgraph vs plotly
+        self.ssa.set_clip_xaxes( False )
         self.ssa.window(self.last_x1, self.last_x2) 
         
         # populate here, as used by plot_simple (prior to render)
@@ -550,7 +553,8 @@ class MetricsMixin:
 
         # update palette
         self.set_palette()
-        
+
+
 
     # --------------------------------------------------------------------------------
     # populate annotation instances (updated when annots selected)

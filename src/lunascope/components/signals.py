@@ -261,8 +261,6 @@ class SignalsMixin:
 
     def _update_hypnogram(self):
 
-        print( '_update_hypnogram()' )
-        
         # writes on the same canvas as the hypnogram above, but only updates the
         # stuff that may change
 
@@ -279,12 +277,11 @@ class SignalsMixin:
 
         has_staging = self._has_staging( False ) # F = do not require >1 stage
 
-        print( 'has staging' , has_staging )
+#        print( 'has staging' , has_staging )
 #        if not has_staging:
 #            print( 'no staging??')
 #            return 
-        
-        
+                
         # get staging (in units no larger than 30 seconds)
         # use STAGES here so that we only get the unmasked datapoints
 
@@ -292,7 +289,7 @@ class SignalsMixin:
             res = self.p.silent_proc( 'EPOCH align verbose & STAGE' )
         except (RuntimeError) as e:
             QMessageBox.critical(
-                None,
+                self.ui,
                 "Error running STAGE: checking for overlapping staging annotations",
                 "Problem with annotations: check for overlapping stage annotations"
             )
@@ -320,8 +317,6 @@ class SignalsMixin:
         # merge
         df = pd.merge(df1, df2, on="E", how="inner")
 
-        print('df',df)
-        
         if len( df ) != 0:
             starts = df[ 'START' ].to_numpy()
             stops = df[ 'STOP' ].to_numpy()
@@ -397,9 +392,14 @@ class SignalsMixin:
         # special version that releases the GIL
         self.ss.segsrv.populate_lunascope( chs = self.ss_chs , anns = self.ss_anns )
         self.ss.set_annot_format6( False ) # pyqtgraph, not plotly
-    
+        self.ss.set_clip_xaxes( False )
+        
     def _render_signals(self):
 
+        if not hasattr(self, "p"):
+            QMessageBox.critical( self.ui , "Error", "No instance attached" )
+            return
+        
         # update hypnogram and segment plot
         self._update_hypnogram()
 
@@ -436,7 +436,8 @@ class SignalsMixin:
         self.sb_progress.setVisible(True)
         self.sb_progress.setRange(0, 0) 
         self.sb_progress.setFormat("Running…")
-        
+        self.lock_ui()
+
         # set up call on different thread
         fut_ss = self._exec.submit( self._populate_segsrv )  # returns nothing
                 
@@ -465,8 +466,9 @@ class SignalsMixin:
         try:
             self._complete_rendering()
         finally:
+            self.unlock_ui()
             self._busy = False
-            self._buttons( True )
+            self._buttons( True )           
             self.sb_progress.setRange(0, 100); self.sb_progress.setValue(0)
             self.sb_progress.setVisible(False)
             
@@ -475,8 +477,9 @@ class SignalsMixin:
         try:
             # show or log the error; pick one
             from PySide6.QtWidgets import QMessageBox
-            QMessageBox.critical(self, "Error rendering sample", self._last_tb)
+            QMessageBox.critical(self.ui, "Error rendering sample", self._last_tb)
         finally:
+            self.unlock_ui()
             self._busy = False
             self._buttons( True )
             self.sb_progress.setRange(0, 100); self.sb_progress.setValue(0)
@@ -501,7 +504,7 @@ class SignalsMixin:
         self.ss.window( self.last_x1, self.last_x2)
 
         self._update_scaling()
-        self._update_pg1()
+#        self._update_pg1()  [ is called by update_scaling() ] 
 
         
     def on_window_range(self, lo: float, hi: float):
@@ -793,6 +796,10 @@ class SignalsMixin:
     #
     # --------------------------------------------------------------------------------
 
+
+    
+
+    
     def _update_pg1(self):
 
         if self.rendered is not True:
@@ -863,7 +870,7 @@ class SignalsMixin:
             self.annot_curves[aidx].setData( [ x1 , x2 ] , [ ( y0[0] + y1[0] ) / 2  , ( y0[0] + y1[0] ) / 2 ] )
 #            self.annot_mgr.toggle( ann , True )
             a0, a1 = _ensure_min_px_width( vb, a0, a1, px=1)  # 1-px minimum
-            self.annot_mgr.update_track( ann , x0 = a0 , x1 = a1 , y0 = y0 , y1 = y1 )
+            self.annot_mgr.update_track( ann , x0 = a0 , x1 = a1 , y0 = y0 , y1 = y1 , reduce = True )
             # labels
             yv[idx] = ( y0[0] * 2 + y1[0]  ) / 3.0
             if self.show_labels: 
@@ -1020,13 +1027,13 @@ class SignalsMixin:
             a1 = self.ssa.get_annots_xaxes_ends( ann )
             y0 = self.ssa.get_annots_yaxes( ann )
             y1 = self.ssa.get_annots_yaxes_ends( ann )
-
+           
             # draw
             self.annot_curves[ aidx ].setData( [ x1 , x2 ] , [ ( y0[0] + y1[0] ) / 2  , ( y0[0] + y1[0] ) / 2 ] ) 
 
             #            self.annot_mgr.toggle( ann , True )
             a0, a1 = _ensure_min_px_width( vb, a0, a1, px=1)  # 1-px minimum
-            self.annot_mgr.update_track( ann , x0 = a0 , x1 = a1 , y0 = y0 , y1 = y1 )
+            self.annot_mgr.update_track( ann , x0 = a0 , x1 = a1 , y0 = y0 , y1 = y1 , reduce = True )
 
             # labels
             yv[idx] = ( y0[0] * 2 + y1[0]  ) / 3.0 
@@ -1683,7 +1690,7 @@ class TextBatch(pg.GraphicsObject):
 
 import numpy as np
 import pyqtgraph as pg
-from pyqtgraph.Qt import QtCore
+from PySide6 import QtGui, QtCore
 
 class TrackManager:
     def __init__(self, plot):
@@ -1727,7 +1734,7 @@ class TrackManager:
             eff = self._effective_pen(t["pen"])
             t["item"].setOpts(pen=eff)
 
-    def update_track(self, name, x0, x1, y0, y1, color=None, pen=None):
+    def update_track(self, name, x0, x1, y0, y1, color=None, pen=None, reduce=False ):
         """
         Replace the given track with new rectangles spanning [x0,x1] × [y0,y1].
         Arrays must be equal length.
@@ -1753,11 +1760,21 @@ class TrackManager:
         if name in self.tracks:
             self.plot.removeItem(self.tracks[name]["item"])
 
+        # make line,box effect
+        vb = self.plot.getViewBox()
+        if reduce:
+            x0_all, x1_all, y0_all, y1_all = build_dual_rect_arrays(vb, x0, x1, y0, y1, hfrac=0.5)
+        else:
+            x0_all = x0
+            x1_all = x1
+            y0_all = y0
+            y1_all = y1
+
         # Create item with adaptive pen
         eff_pen = self._effective_pen(pen)
-        item = pg.BarGraphItem(x0=x0, x1=x1, y0=y0, y1=y1, brush=color, pen=eff_pen, name=name)
+        item = pg.BarGraphItem(x0=x0_all, x1=x1_all, y0=y0_all, y1=y1_all, brush=color, pen=eff_pen, name=name)
         self.plot.addItem(item)
-        self.tracks[name] = {"item": item, "color": color, "pen": pen, "visible": True}
+        self.tracks[name] = {"item": item, "color": color, "pen": pen, "visible": True}            
 
         # Initialize border state if first time
         if self._borders_on is None:
@@ -1779,65 +1796,56 @@ class TrackManager:
                 self.tracks.pop(name)
 
 
-# legacy version that did not handle overlapping black borders so well
-# on low DPI screens
-class OldTrackManager:
-    def __init__(self, plot):
-        self.plot = plot
-        self.tracks = {}  # name -> dict(item, color, visible)
 
-    def update_track(self, name, x0, x1, y0, y1, color=None, pen=None):
-        """
-        Replace the given track with new rectangles spanning [x0,x1] × [y0,y1].
-        Arrays must be equal length.
-        """
-        x0 = np.asarray(x0)
-        x1 = np.asarray(x1)
-        y0 = np.asarray(y0)
-        y1 = np.asarray(y1)
-        assert x0.shape == x1.shape == y0.shape == y1.shape
+                
+# ------------------------------------------------------------
 
-        if color is None and name in self.tracks:
-            color = self.tracks[name]["color"]
-        if color is None:
-            color = (200, 250, 240)
+import numpy as np
 
-        if pen is None and name in self.tracks:
-            pen = self.tracks[name]["pen"]
-        if pen is None:
-            pen = (0, 0, 0)
+def build_dual_rect_arrays(vb, x0, x1, y0, y1, hfrac=0.66, wpx = 1 ):
+    """
+    Returns x0_all, x1_all, y0_all, y1_all that include:
+      - a 1-px wide full-height strip at each left edge
+      - a 66% height body for the remainder
+    vb: pyqtgraph ViewBox (for pixel→data conversion)
+    """
+    x0 = np.asarray(x0); x1 = np.asarray(x1)
+    y0 = np.asarray(y0); y1 = np.asarray(y1)
 
-        # remove old
-        if name in self.tracks:
-            self.plot.removeItem(self.tracks[name]["item"])
-        '''
-        valid = (np.abs(x1 - x0) > 1e-6) & (np.abs(y1 - y0) > 1e-6)
-        if not np.any(valid):
-            return
-        x0, x1, y0, y1 = x0[valid], x1[valid], y0[valid], y1[valid]
-        '''
-        item = pg.BarGraphItem(
-            x0=x0, x1=x1, y0=y0, y1=y1,
-            brush=color, pen=pen, name=name
-        )
-        self.plot.addItem(item)
-        self.tracks[name] = {"item": item, "color": color, "pen": pen, "visible": True}
+    # normalize heights
+    ylo = np.minimum(y0, y1)
+    yhi = np.maximum(y0, y1)
+    h   = yhi - ylo
+    ym  = 0.5 * (yhi + ylo)
 
-    def toggle(self, name, on=True):
-        if name in self.tracks:
-            self.tracks[name]["visible"] = on
-            self.tracks[name]["item"].setVisible(on)
+    # 1 pixel in data units
+    dx, _ = vb.viewPixelSize()
+    w1 = dx  # exact 1 px
 
-    def clear(self, name=None):
-        if name is None:
-            for t in self.tracks.values():
-                self.plot.removeItem(t["item"])
-            self.tracks.clear()
-        else:
-            if name in self.tracks:
-                self.plot.removeItem(self.tracks[name]["item"])
-                self.tracks.pop(name)
+    # thin strip: [x0, x0+w1] at full height
+    x0_thin = x0
+    x1_thin = x0 + w1 * wpx
+    y0_thin = ylo
+    y1_thin = yhi
 
+    # body: [x0+w1, x1] at 66% height centered
+    y0_body = ym - 0.5 * h * hfrac
+    y1_body = ym + 0.5 * h * hfrac
+    x0_body = x0 + w1 * wpx
+    x1_body = x1
+
+    # concatenate both sets
+    x0_all = np.concatenate([x0_thin, x0_body])
+    x1_all = np.concatenate([x1_thin, x1_body])
+    y0_all = np.concatenate([y0_thin, y0_body])
+    y1_all = np.concatenate([y1_thin, y1_body])
+
+    return x0_all, x1_all, y0_all, y1_all
+
+
+
+# ------------------------------------------------------------
+        
 @staticmethod
 def _ensure_min_px_width(vb, x0, x1, px=1):
     x0 = np.asarray(x0, dtype=float)

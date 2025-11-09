@@ -23,6 +23,7 @@
 from . import __version__
 
 import lunapi as lp
+import pandas as pd
 
 import os, sys, threading
 from concurrent.futures import ThreadPoolExecutor
@@ -37,7 +38,7 @@ from PySide6.QtWidgets import QSplitter, QVBoxLayout, QWidget
 
 import pyqtgraph as pg
 
-from  .helpers import clear_rows, add_dock_shortcuts, pick_two_colors, override_colors, random_darkbg_colors
+from  .helpers import clear_rows, add_dock_shortcuts, pick_two_colors, override_colors, random_darkbg_colors, Blocker
 
 from .components.slist import SListMixin
 from .components.metrics import MetricsMixin
@@ -55,7 +56,13 @@ from .components.soappops import SoapPopsMixin
 # ------------------------------------------------------------
 # main GUI controller class
 
-class Controller( QMainWindow,
+from PySide6.QtCore import QObject
+
+
+#    def lock_ui(self, msg="Processing…"): self.blocker.show_block(msg)
+#    def unlock_ui(self):                  self.blocker.hide_block()
+
+class Controller( QObject,
                   SListMixin , MetricsMixin ,
                   HypnoMixin , SoapPopsMixin, 
                   AnalMixin , SignalsMixin, 
@@ -64,6 +71,9 @@ class Controller( QMainWindow,
 
     def __init__(self, ui, proj):
         super().__init__()
+
+        self.ui = ui
+        self.proj = proj
 
         # GUI
         self.ui = ui
@@ -74,7 +84,8 @@ class Controller( QMainWindow,
         # send compute to a different thread
         self._exec = ThreadPoolExecutor(max_workers=1)
         self._busy = False
-
+        self.blocker = Blocker(self.ui, "...Processing...\n...please wait...", alpha=120)
+                
         # setups
         self._init_colors()
         
@@ -207,30 +218,48 @@ class Controller( QMainWindow,
         self.ui.setCorner(Qt.TopRightCorner,    Qt.RightDockWidgetArea)
         self.ui.setCorner(Qt.BottomRightCorner, Qt.RightDockWidgetArea)
 
-        # arrange docks: lower docks (console/output)
+        
+        # arrange docks: lower docks (console, outputs)
         w = self.ui.width()
-
-        self.ui.resizeDocks([ self.ui.dock_console , self.ui.dock_outputs ],
-                            [ int(w*0.6), int(w*0.4)], Qt.Horizontal)
+        self.ui.resizeDocks(
+            [self.ui.dock_console, self.ui.dock_outputs],
+            [int(w * 0.6), int(w * 0.4)],
+            Qt.Horizontal
+        )
 
         # arrange docks: left docks (samples, settings)
-        self.ui.resizeDocks([ self.ui.dock_slist , self.ui.dock_settings ],
-                            [int(w*0.7), int(w*0.3) ], Qt.Vertical )
+        self.ui.resizeDocks(
+            [self.ui.dock_slist, self.ui.dock_settings],
+            [int(w * 0.7), int(w * 0.3)],
+            Qt.Vertical
+        )
+
+        # arrange docks: stack spectrogram and hypnogram
+        self.ui.tabifyDockWidget(self.ui.dock_spectrogram, self.ui.dock_hypno)
+        self.ui.dock_spectrogram.raise_()
+
+        # arrange docks: right docks (signals, annotations, events)
+        h = self.ui.height()
+        self.ui.resizeDocks(
+            [self.ui.dock_sig, self.ui.dock_annot, self.ui.dock_annots, self.ui.dock_mask],
+            [int(h * 0.35), int(h * 0.25), int(h * 0.1), int(h * 0.1)],
+            Qt.Vertical
+        )
+
+        # adjust overall left vs right width
+        w_right = 720
+        self.ui.resizeDocks(
+            [self.ui.dock_slist, self.ui.dock_sig],
+            [self.ui.width() - w_right, w_right],
+            Qt.Horizontal
+        )
+
+        # general layout policies
+        cw = self.ui.centralWidget()
+        cw.setMinimumWidth(0)
+        cw.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         
-        # arrange docks: right docks (signals, annots, events)
-        h = self.ui.height()
-        self.ui.resizeDocks([ self.ui.dock_sig, self.ui.dock_annot, self.ui.dock_annots , self.ui.dock_mask ] , 
-                            [  int(h*0.35), int(h*0.25), int(h*0.1) , int(h*0.1) ],
-                            Qt.Vertical)
-        w_right = 380
-        self.ui.resizeDocks([self.ui.dock_slist, self.ui.dock_sig], [self.width()-w_right, w_right], Qt.Horizontal)
-
-        # arrange docks: general
-        self.ui.centralWidget().setMinimumWidth(0)
-        self.ui.centralWidget().setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-
-
         # ------------------------------------------------------------
         # set up status bar
 
@@ -278,7 +307,17 @@ class Controller( QMainWindow,
         self.ui.resize(1200, 800)
 
 
-    
+    # ------------------------------------------------------------
+    # blockers
+    # ------------------------------------------------------------
+
+    def lock_ui(self, msg="Processing...\n\n...please wait"):
+        self.blocker.show_block(msg)
+
+    def unlock_ui(self):
+        self.blocker.hide_block()
+
+            
     # ------------------------------------------------------------
     # attach a new record
     # ------------------------------------------------------------
@@ -307,12 +346,47 @@ class Controller( QMainWindow,
             self.p = self.proj.inst( id_str )
         except Exception as e:
             QMessageBox.critical(
-                self,
+                self.ui,
                 "Error",
                 f"Problem attaching individual {id_str}\nError:\n{e}",
             )
             return
 
+        # check for weird EDF record sizes
+        rec_size = self.p.edf.stat()['rs']
+        if not rec_size.is_integer():
+
+            edf_file = self.p.edf.stat()['edf_file']
+            base, ext = os.path.splitext(edf_file)
+            if ext.lower() == ".edf":
+                edf_file = f"{base}-edit.edf"
+            else:
+                edf_file = f"{path}-edit.edf"
+
+            reply = QMessageBox.question(
+                self.ui,
+                "Fractional EDF record size warning",
+                f"Non-integer EDF record size ({rec_size}).\n\nNot an error, but can cause problems.\n\n"                
+                f"Would you like to generate a new EDF with standard 1-second EDF records?\n\n{edf_file}",
+                QMessageBox.Yes | QMessageBox.No )        
+
+            if reply == QMessageBox.Yes:
+                try:
+                    self.p.eval( 'RECORD-SIZE dur=1 no-problem edf=' + edf_file[:-4] )
+                except Exception as e:
+                    QMessageBox.critical(
+                        self.ui,
+                        "Error",
+                        f"Problem generating new EDF\nError:\n{e}",
+                    )
+                    return
+                finally:
+                    QMessageBox.information(
+                        self.ui,
+                        "Reload EDF",
+                        "Done - now reload the new EDF (or make a new sample list)" )
+                    return
+        
         # initiate graphs
         self.curves = [ ]
         self.annot_curves = [ ] 
@@ -359,11 +433,11 @@ class Controller( QMainWindow,
             clear_rows( self.annots_table_proxy )
 
         clear_rows( self.ui.anal_tables ) 
-        clear_rows( self.ui.tbl_soap1 )
-        clear_rows( self.ui.tbl_pops1 )
-        clear_rows( self.ui.tbl_hypno1 )
-        clear_rows( self.ui.tbl_hypno2 )
-        clear_rows( self.ui.tbl_hypno3 )
+#        clear_rows( self.ui.tbl_soap1 )
+#        clear_rows( self.ui.tbl_pops1 )
+#        clear_rows( self.ui.tbl_hypno1 )
+#        clear_rows( self.ui.tbl_hypno2 )
+#        clear_rows( self.ui.tbl_hypno3 )
 
         self.ui.combo_spectrogram.clear()
         self.ui.combo_pops.clear()
@@ -383,10 +457,10 @@ class Controller( QMainWindow,
 
         self.popscanvas.ax.cla()
         self.popscanvas.figure.canvas.draw_idle()
-            
-        self.popshypnocanvas.ax.cla()
-        self.popshypnocanvas.figure.canvas.draw_idle()
 
+        # POPS results
+        self.pops_df = pd.DataFrame()
+        
         # filters: chennels -> filters
         self.fmap = { } 
 
@@ -426,7 +500,16 @@ class Controller( QMainWindow,
         else:
             self.ui.butt_render.setStyleSheet("background-color: #F8F8F8; color: #8B0000;")
 
-            
+        # set empiric false to allow fixed scale in un-rendered
+        self.ui.radio_empiric.setChecked( self.rendered )
+        self.ui.radio_empiric.setEnabled( self.rendered )
+        self.ui.radio_clip.setEnabled( self.rendered )
+        self.ui.spin_scale.setEnabled( self.rendered )
+        self.ui.spin_spacing.setEnabled( self.rendered )
+        self.ui.label_spacing.setEnabled( self.rendered )
+        self.ui.label_scale.setEnabled( self.rendered )
+        self.ui.radio_fixedscale.setEnabled( self.rendered )
+        
     #
     # handle palettes
     #
@@ -576,7 +659,7 @@ class Controller( QMainWindow,
             self.ui,
             "Open color map",
             "",
-            "Text (*.txt);;All Files (*)",
+            "Text (*.txt *.map *.pal);;All Files (*)",
             options=QFileDialog.Option.DontUseNativeDialog
         )
 
@@ -605,7 +688,7 @@ class Controller( QMainWindow,
                 
             except (UnicodeDecodeError, OSError) as e:
                 QMessageBox.critical(
-                    None,
+                    self.ui,
                     "Error opening color map",
                     f"Could not load {txt_file}\nException: {type(e).__name__}: {e}"
                 )
@@ -619,7 +702,7 @@ class Controller( QMainWindow,
                 
         
     def show_about(self):
-        box = QMessageBox(self)
+        box = QMessageBox(self.ui)
         box.setWindowTitle("About Lunascope")
         box.setIcon(QMessageBox.Information)
         box.setTextFormat(Qt.RichText)

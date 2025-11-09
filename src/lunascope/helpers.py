@@ -318,4 +318,86 @@ def random_darkbg_colors(n, seed=None):
     return cols
 
 
+# ------------------------------------------------------------
+#
+# dialog to block GUI 
+#
+# ------------------------------------------------------------
 
+import weakref
+from PySide6.QtWidgets import QWidget, QLabel, QVBoxLayout
+from PySide6.QtCore import Qt, QEvent
+from PySide6.QtGui import QPainter, QColor
+
+
+class Blocker(QWidget):
+    """
+    Child overlay that blocks input and shows a centered message.
+    Safe on shutdown (no 'C++ object already deleted' errors).
+    """
+
+    def __init__(self, parent, message="Working…", alpha=180):
+        super().__init__(parent)
+        self._parent_ref = weakref.ref(parent)
+        self._dead = False
+        self._alpha = int(alpha)
+
+        # window + event setup
+        self.setWindowFlags(Qt.Widget | Qt.FramelessWindowHint)
+        self.setAttribute(Qt.WA_TransparentForMouseEvents, False)
+
+        # label
+        self.label = QLabel(message, self)
+        self.label.setAlignment(Qt.AlignCenter)
+        self.label.setStyleSheet("color: white; font-size: 22px;")
+
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.addStretch(1)
+        lay.addWidget(self.label, alignment=Qt.AlignCenter)
+        lay.addStretch(1)
+
+        # paint-based translucent background
+        if parent:
+            parent.installEventFilter(self)
+            try:
+                parent.destroyed.connect(self._on_parent_destroyed)
+            except RuntimeError:
+                pass
+
+        self.hide()
+
+    def paintEvent(self, _):
+        p = QPainter(self)
+        p.fillRect(self.rect(), QColor(0, 0, 0, self._alpha))
+
+    def eventFilter(self, obj, ev):
+        if self._dead:
+            return False
+        parent = self._parent_ref()
+        if not parent:
+            return False
+        if obj is parent and ev.type() in (
+            QEvent.Resize, QEvent.Move, QEvent.Show, QEvent.WindowStateChange
+        ):
+            self.setGeometry(parent.rect())
+        return False
+
+    def show_block(self, msg=None, alpha=None):
+        if msg is not None:
+            self.label.setText(msg)
+        if alpha is not None:
+            self._alpha = int(alpha)
+        parent = self._parent_ref()
+        if parent:
+            self.setGeometry(parent.rect())
+        self.show()
+        self.raise_()
+
+    def hide_block(self):
+        self.hide()
+
+    def _on_parent_destroyed(self):
+        self._dead = True
+        self.hide()
+        self.deleteLater()

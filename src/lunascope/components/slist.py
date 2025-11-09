@@ -299,7 +299,7 @@ class SListMixin:
     def coerce_numeric_df(
         df: pd.DataFrame,
         *,
-        decimals_default: int = 3,
+        decimals_default: int = 5,
         decimals_per_col: dict[str, int] | None = None,
         extra_missing: set[str] | None = None,
     ) -> pd.DataFrame:

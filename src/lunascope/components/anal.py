@@ -1,3 +1,4 @@
+
 #  --------------------------------------------------------------------
 #
 #  This file is part of Luna.
@@ -114,7 +115,8 @@ class AnalMixin:
         self.sb_progress.setVisible(True)
         self.sb_progress.setRange(0, 0) 
         self.sb_progress.setFormat("Running…")
-        
+        self.lock_ui()
+                
         fut = self._exec.submit(self.p.eval_lunascope, cmd)  # returns str
                 
         def done(_f=fut):
@@ -148,6 +150,7 @@ class AnalMixin:
             # show outputs from last command
             self._render_tables(tbls)
         finally:
+            self.unlock_ui()
             self._busy = False
             self._buttons( True )
             # not potentially changed: not current
@@ -162,17 +165,20 @@ class AnalMixin:
         try:
             # show or log the error; pick one
             from PySide6.QtWidgets import QMessageBox
-            QMessageBox.critical(self, "Evaluation error", self._last_tb)
+            QMessageBox.critical(self.ui, "Evaluation error", self._last_tb)
             # or: print(self._last_tb, file=sys.stderr)
         finally:
+            self.unlock_ui()
             self._busy = False
             self._buttons( True )
             self._set_render_status( self.rendered , False )
             self.sb_progress.setRange(0, 100); self.sb_progress.setValue(0)
             self.sb_progress.setVisible(False)
-            # turn off any prior REPORT hides
-            self.p.silent_proc( 'REPORT show-all' )
+            # turn off any prior REPORT hides (allow that 'problem' flag may be set)
+            try: self.p.silent_proc( 'REPORT show-all' )
+            except RuntimeError: pass
 
+                
     def _buttons( self, status ):
         self.ui.butt_anal_exec.setEnabled(status)
         self.ui.butt_spectrogram.setEnabled(status)
@@ -187,7 +193,7 @@ class AnalMixin:
         self.ui.butt_load_edf.setEnabled(status)
 
             
-    def _render_tables(self,tbls):
+    def _render_tables(self, tbls):
 
         # did we add any annotations? if so, updating ssa needed 
         # (as this is where events table pulls from)
@@ -212,8 +218,11 @@ class AnalMixin:
         # just in case the user run REPORT hide of some flavor, e.g. to
         # make sure the silent_proc() calls work as expected, e.g. used
         # used below
-        self.p.silent_proc( 'REPORT show-all' )
 
+        try: self.p.silent_proc( 'REPORT show-all' )
+        except RuntimeError: pass
+        
+            
         # update main metrics tables (i.e. if new things added)
         self._update_metrics()
         self._update_spectrogram_list()
@@ -241,7 +250,7 @@ class AnalMixin:
             self.ui,
             "Open Luna script",
             "",
-            "Text (*.txt);;All Files (*)",
+            "Text (*.txt *.cmd);;All Files (*)",
             options=QFileDialog.Option.DontUseNativeDialog
         )
         if txt_file:
@@ -250,7 +259,7 @@ class AnalMixin:
                 self.ui.txt_inp.setPlainText(text)
             except (UnicodeDecodeError, OSError) as e:
                 QMessageBox.critical(
-                    None,
+                    self.ui,
                     "Error opening Luna script",
                     f"Could not load {txt_file}\nException: {type(e).__name__}: {e}"
                 )
@@ -267,7 +276,7 @@ class AnalMixin:
             self,
             "Save Luna Script",
             "",
-            "Text Files (*.txt);;All Files (*)",
+            "Text Files (*.txt *.param);;All Files (*)",
             options=QFileDialog.Option.DontUseNativeDialog
         )
 
@@ -291,10 +300,11 @@ class AnalMixin:
 
         # transpose?
         if self.ui.radio_transpose.isChecked():
+            # first coerce, otherwise this step will be missed by df_to_model()
+            tbl = self.coerce_numeric_df( tbl )
             tbl = tbl.T.reset_index()
             tbl.rename(columns={"index": "VAR"}, inplace=True)
             tbl.columns = ["VAR"] + [f"row{i}" for i in range(1, tbl.shape[1])]
-
         
         model = self.df_to_model( tbl )
         # attach proxy to model
@@ -309,7 +319,7 @@ class AnalMixin:
         self.ui.flt_table.textChanged.connect(self._on_anal_filter_text)
         
         view = self.ui.anal_table
-        view.setSortingEnabled(True)
+        view.setSortingEnabled(False)
         h = view.horizontalHeader()
         h.setSectionResizeMode(QHeaderView.Interactive)  # user-resizable                                          
         h.setStretchLastSection(False)                   # no auto-stretch fighting you                            

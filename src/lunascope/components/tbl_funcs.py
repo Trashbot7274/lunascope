@@ -351,29 +351,33 @@ def add_combo_column(
 
 
 import types
-from PySide6.QtCore import QSignalBlocker, Qt
+from PySide6.QtCore import QSignalBlocker, Qt, QTimer
+
 
 def add_check_column(view, channel_col_before_insert, header_text="✔",
                      initial_checked=None, on_change=None, visible_only=False):
 
+    # expects: Qt, QTimer, QSignalBlocker, QStandardItem, QStandardItemModel,
+    #          QHeaderView, QSortFilterProxyModel, types
     model = view.model()
     proxy = model if isinstance(model, QSortFilterProxyModel) else None
     src = proxy.sourceModel() if proxy else model
     if not isinstance(src, QStandardItemModel):
         raise TypeError("Expect QStandardItemModel or proxy->QStandardItemModel")
 
-    # --- ensure proxy stays consistent with new column
+    # detach proxy during structure change
     if proxy:
         proxy.setSourceModel(None)
 
+    # insert column 0
     src.insertColumn(0)
     if header_text:
         src.setHeaderData(0, Qt.Horizontal, header_text)
 
-    checked = set(map(str, initial_checked or []))
+    checked = set(map(str, (initial_checked or [])))
     chan_col_after = channel_col_before_insert + 1
 
-    # populate
+    # populate without signals
     src.blockSignals(True)
     try:
         for r in range(src.rowCount()):
@@ -388,7 +392,7 @@ def add_check_column(view, channel_col_before_insert, header_text="✔",
     finally:
         src.blockSignals(False)
 
-    # reattach proxy after structure change
+    # reattach proxy/model
     if proxy:
         proxy.setSourceModel(src)
         view.setModel(proxy)
@@ -397,13 +401,27 @@ def add_check_column(view, channel_col_before_insert, header_text="✔",
 
     view.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
 
-    _squelch = False
+    # ----- state -----
+    _squelch = False          # bulk guard
+    _in_on_change = False     # re-entrancy guard
+    _scheduled = False        # debouncer flag
+
+    _debounce = QTimer(view)
+    _debounce.setSingleShot(True)
 
     def _checked(self=view, _src=src, _proxy=proxy, _vis=visible_only, _cc=chan_col_after):
         out = []
         if _proxy and _vis:
-            for r in range(_proxy.rowCount()):
-                srow = _proxy.mapToSource(_proxy.index(r, 0)).row()
+            # robust mapping (skip invalids)
+            pr = _proxy.rowCount()
+            for r in range(pr):
+                pix = _proxy.index(r, 0)
+                if not pix.isValid():
+                    continue
+                six = _proxy.mapToSource(pix)
+                if not six.isValid():
+                    continue
+                srow = six.row()
                 it = _src.item(srow, 0)
                 if it and it.checkState() == Qt.Checked:
                     out.append(str(_src.data(_src.index(srow, _cc))))
@@ -414,58 +432,119 @@ def add_check_column(view, channel_col_before_insert, header_text="✔",
                     out.append(str(_src.data(_src.index(r, _cc))))
         return out
 
+    def _emit_now():
+        nonlocal _scheduled, _in_on_change
+        if not on_change:
+            _scheduled = False
+            return
+        if _squelch or _in_on_change:
+            # still unstable; try again next turn
+            _debounce.start(0)
+            return
+        _scheduled = False
+        _in_on_change = True
+        try:
+            on_change(_checked())
+        finally:
+            _in_on_change = False
+
+    _debounce.timeout.connect(_emit_now)
+
+    def _schedule_emit():
+        nonlocal _scheduled
+        if _scheduled:
+            # restart to coalesce multiple triggers in this tick
+            _debounce.start(0)
+            return
+        _scheduled = True
+        _debounce.start(0)
+
     def _loop_set(state, xs=None, _src=src, _proxy=proxy, _cc=chan_col_after):
         nonlocal _squelch
         _squelch = True
-        blocker = QSignalBlocker(_src)
+
+        # freeze UI and signals
+        sorting_was = getattr(view, "isSortingEnabled", lambda: False)()
+        if sorting_was:
+            view.setSortingEnabled(False)
+        vb = False
         try:
-            target = set(map(str, xs)) if xs is not None else None
+            view.setUpdatesEnabled(False)
+            vb = True
+        except Exception:
+            pass
+
+        b_src = QSignalBlocker(_src)
+        b_prox = QSignalBlocker(_proxy) if _proxy else None
+
+        changed_any = False
+        try:
+            target = None if xs is None else (xs if isinstance(xs, set) else set(map(str, xs)))
+
+            # choose rows once
             if _proxy and visible_only:
-                rng = range(_proxy.rowCount())
-                for r in rng:
-                    srow = _proxy.mapToSource(_proxy.index(r, 0)).row()
-                    it = _src.item(srow, 0)
-                    if not it:
+                pr = _proxy.rowCount()
+                src_rows = []
+                for r in range(pr):
+                    pix = _proxy.index(r, 0)
+                    if not pix.isValid():
                         continue
-                    if target is None:
-                        if it.checkState() != state:
-                            it.setCheckState(state)
-                    else:
-                        ch = str(_src.data(_src.index(srow, _cc)))
-                        tgt = Qt.Checked if ch in target else Qt.Unchecked
-                        if it.checkState() != tgt:
-                            it.setCheckState(tgt)
+                    six = _proxy.mapToSource(pix)
+                    if six.isValid():
+                        src_rows.append(six.row())
             else:
-                rng = range(_src.rowCount())
-                for r in rng:
+                src_rows = range(_src.rowCount())
+
+            # apply updates only when needed
+            if target is None:
+                want = state
+                for r in src_rows:
+                    it = _src.item(r, 0)
+                    if it and it.checkState() != want:
+                        it.setCheckState(want)
+                        changed_any = True
+            else:
+                for r in src_rows:
                     it = _src.item(r, 0)
                     if not it:
                         continue
-                    if target is None:
-                        if it.checkState() != state:
-                            it.setCheckState(state)
-                    else:
-                        ch = str(_src.data(_src.index(r, _cc)))
-                        tgt = Qt.Checked if ch in target else Qt.Unchecked
-                        if it.checkState() != tgt:
-                            it.setCheckState(tgt)
-        finally:
-            del blocker
-            _squelch = False
-        # force repaint of col 0
-        if _src.rowCount():
-            _src.dataChanged.emit(_src.index(0, 0), _src.index(_src.rowCount()-1, 0), [Qt.CheckStateRole])
-        if on_change:
-            on_change(_checked())
+                    ch = str(_src.data(_src.index(r, _cc)))
+                    want = Qt.Checked if ch in target else Qt.Unchecked
+                    if it.checkState() != want:
+                        it.setCheckState(want)
+                        changed_any = True
 
-    # bind methods safely; fall back if instance attrs are blocked
+        finally:
+            del b_src
+            if b_prox is not None:
+                del b_prox
+            if vb:
+                view.setUpdatesEnabled(True)
+            if sorting_was:
+                view.setSortingEnabled(True)
+
+            # make proxy recompute mappings before we emit
+            if proxy:
+                proxy.invalidate()
+
+            _squelch = False
+
+        # one repaint over col 0
+        rc = _src.rowCount()
+        if rc:
+            _src.dataChanged.emit(_src.index(0, 0), _src.index(rc - 1, 0), [Qt.CheckStateRole])
+
+        # defer a single logical change until the model/proxy/view are stable
+        if changed_any:
+            _schedule_emit()
+
+    # bind helpers
     try:
         view.checked = types.MethodType(_checked, view)
         view.select_all_checks = types.MethodType(lambda self: _loop_set(Qt.Checked), view)
         view.select_none_checks = types.MethodType(lambda self: _loop_set(Qt.Unchecked), view)
         view.set_checked_by_labels = types.MethodType(lambda self, xs: _loop_set(Qt.PartiallyChecked, xs), view)
     except AttributeError:
-        # store on the controller instead, or return a handle object
         return {
             "checked": _checked,
             "select_all": lambda: _loop_set(Qt.Checked),
@@ -473,16 +552,20 @@ def add_check_column(view, channel_col_before_insert, header_text="✔",
             "set_labels": lambda xs: _loop_set(Qt.PartiallyChecked, xs),
         }
 
+    # per-item handler: ignore during bulk, coalesce otherwise
     def _on_item_changed(itm):
-        if _squelch or itm.column() != 0:
+        if itm.column() != 0:
             return
-        if on_change:
-            on_change(_checked())
+        if _squelch:
+            return
+        _schedule_emit()
 
     if not getattr(src, "_checkcol_connected", False):
         src.itemChanged.connect(_on_item_changed)
         setattr(src, "_checkcol_connected", True)
-    
+
+
+            
 
 # ------------------------------------------------------------
 #

@@ -91,17 +91,12 @@ class SoapPopsMixin:
         self.popscanvas = MplCanvas(self.ui.host_pops)
         self.ui.host_pops.layout().setContentsMargins(0,0,0,0)
         self.ui.host_pops.layout().addWidget( self.popscanvas )
-
-        # POPS hypnogram
-        self.ui.host_pops_hypno.setLayout(QVBoxLayout())
-        self.popshypnocanvas = MplCanvas(self.ui.host_pops)
-        self.ui.host_pops_hypno.layout().setContentsMargins(0,0,0,0)
-        self.ui.host_pops_hypno.layout().addWidget( self.popshypnocanvas )
         
         # wiring
         self.ui.butt_soap.clicked.connect( self._calc_soap )
         self.ui.butt_pops.clicked.connect( self._calc_pops )
-        
+
+        self.ui.radio_pops_hypnodens.toggled.connect( self._render_pops_hypno )
         
     def _update_soap_list(self):
 
@@ -145,31 +140,31 @@ class SoapPopsMixin:
         soap_pc = self.ui.spin_soap_pc.value()
 
         # run SOAP
-        cmd_str = 'EPOCH align & SOAP sig=' + soap_ch + ' epoch pc=' + str(soap_pc)
-        self.p.eval( cmd_str )
-
+        try:
+            cmd_str = 'EPOCH align & SOAP sig=' + soap_ch + ' epoch pc=' + str(soap_pc)
+            self.p.eval( cmd_str )
+        except Exception:
+            QMessageBox.critical( self.ui , "Error", "Problem running SOAP" )
+            return
+            
         # channel details
         df = self.p.table( 'SOAP' , 'CH' )        
         df = df[ [ 'K' , 'K3' , 'ACC', 'ACC3' ] ]
+
         for c in df.columns:
             try:
                 df[c] = pd.to_numeric(df[c])
             except Exception:
                 pass
+            
         for c in df.select_dtypes(include=['float', 'float64', 'float32']).columns:
             df[c] = df[c].map(lambda x: f"{x:.2f}" if pd.notnull(x) else "")
-        model = self.df_to_model( df )
-        self.ui.tbl_soap1.setModel( model )
 
-        view = self.ui.tbl_soap1
-        h = view.horizontalHeader()
-        #h.setSectionResizeMode(QHeaderView.Interactive)
-        h.setStretchLastSection(False)
-        h.setMinimumSectionSize(50)
-        h.setDefaultSectionSize(100)
-        view.resizeColumnsToContents()
-        #view.setSelectionBehavior(QAbstractItemView.SelectRows)
-        #view.setSelectionMode(QAbstractItemView.SingleSelection)
+        # display...
+        k, k3 = df.loc[0, ['K', 'K3']].astype(float)
+        self.ui.txt_soap_k.setText( f"K = {k:.2f}" )
+        self.ui.txt_soap_k3.setText( f"K3 = {k3:.2f}" )
+        
         
         # hypnodensities
         df = self.p.table( 'SOAP' , 'CH_E' )
@@ -219,78 +214,67 @@ class SoapPopsMixin:
         pops_mod = base / f"{str(pops_model).strip()}.mod"
         if not pops_mod.is_file():
             QMessageBox.critical(
-                None,
+                self.ui,
                 "Error",
                 "Could not open POPS files; double check file path"
             )
             return None
 
-        # run POPS
 
+        # save currents channels/annots selections
+        # (needed by _render_tables() used below)
+        self.curr_chs = self.ui.tbl_desc_signals.checked()                   
+        self.curr_anns = self.ui.tbl_desc_annots.checked()
+
+        
+        # run POPS
         try:
-            cmd_str = 'EPOCH align & RUN-POPS sig=' + pops_chs + ' path=' + pops_path + ' model=' + pops_model + opts
+            cmd_str = 'EPOCH align & RUN-POPS sig=' + pops_chs
+            cmd_str += ' path=' + pops_path
+            cmd_str += ' model=' + pops_model
+            cmd_str += opts
+                        
             self.p.eval( cmd_str )
+            
         except (RuntimeError) as e:
             QMessageBox.critical(
-                None,
+                self.ui,
                 "Error running POPS",
                 f"Exception: {type(e).__name__}: {e}"
             )
+            return
 
         
-        # outputs
-
-        df1 = self.p.table( 'RUN_POPS' )
-        df2 = self.p.table( 'RUN_POPS' , 'SS' )
-        
-        # main output table (tbl_pops1)
-        df = pd.DataFrame(columns=["Variable", "Value"])
-
-        # concordance w/ any existing staging
-        if has_staging:
-            row = df1.index[0]
-            df.loc[len(df)] = ['ACC3', df1.at[row,"ACC3"] ]
-            df.loc[len(df)] = ['K3', df1.at[row,"K3"] ]
-            df.loc[len(df)] = ['ACC', df1.at[row,"ACC"] ]
-            df.loc[len(df)] = ['K', df1.at[row,"K"] ]
-
-        v = df2.loc[df2['SS'].eq('W'), 'PR1']
-        df.loc[len(df)] = ['TWT (mins)', (float(v.iloc[0]) if not v.empty else np.nan)]
-
-        v = df2.loc[df2['SS'].eq('N1'), 'PR1']
-        df.loc[len(df)] = ['N1 (mins)', (float(v.iloc[0]) if not v.empty else np.nan)]
-
-        v = df2.loc[df2['SS'].eq('N2'), 'PR1']
-        df.loc[len(df)] = ['N2 (mins)', (float(v.iloc[0]) if not v.empty else np.nan)]
-
-        v = df2.loc[df2['SS'].eq('N3'), 'PR1']
-        df.loc[len(df)] = ['N3 (mins)', (float(v.iloc[0]) if not v.empty else np.nan)]
-
-        v = df2.loc[df2['SS'].eq('R'), 'PR1']
-        df.loc[len(df)] = ['R (mins)', (float(v.iloc[0]) if not v.empty else np.nan)]
-
-        model = self.df_to_model( df )
-        self.ui.tbl_pops1.setModel( model )        
-            
-        # epoch-level outputs
+        # hypnodensity plot
         df = self.p.table( 'RUN_POPS' , 'E' )
         if has_staging:
             df = df[ [ 'E', 'START', 'PRIOR', 'PRED' , 'PP_N1' , 'PP_N2', 'PP_N3', 'PP_R', 'PP_W'  ] ]
         else:
             df = df[ [ 'E', 'START', 'PRED' , 'PP_N1' , 'PP_N2', 'PP_N3', 'PP_R', 'PP_W'  ] ]
-        hypno_density( df , ax=self.popscanvas.ax)
-        # plot
-        self.popscanvas.draw_idle()        
 
-        # hypnogram
-        hypno( df.PRED , ax=self.popshypnocanvas.ax)
-        self.popshypnocanvas.draw_idle()
+        self.pops_df = df
 
-        # new annotations will have been added (N1, N2, ..., or pN1, pN2, ... if staging already exists)
-        # --> update hypnogram
-        self._update_metrics()
-        self._update_mask_list()
-        # if no original staging
+        self._render_pops_hypno()
+
+        # populate main output and update annotations (e.g. N1, N2, ... or pN1, pN2, ...)
+        tbls = self.p.strata()
+        self._render_tables( tbls )
+
+        # if did not have original staging, we will create a new one
         if not has_staging:
             self._render_hypnogram()
             self._update_hypnogram()
+
+
+
+    def _render_pops_hypno(self):
+
+        if hasattr(self, 'pops_df') and isinstance(self.pops_df, pd.DataFrame) and not self.pops_df.empty:
+
+            # either draw hypnodensity or hypnogram
+            if self.ui.radio_pops_hypnodens.isChecked():
+                hypno_density( self.pops_df , ax=self.popscanvas.ax)
+            else:
+                hypno( self.pops_df.PRED , ax=self.popscanvas.ax)
+
+            self.popscanvas.draw_idle()        
