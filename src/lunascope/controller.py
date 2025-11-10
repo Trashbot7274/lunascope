@@ -39,6 +39,7 @@ from PySide6.QtWidgets import QSplitter, QVBoxLayout, QWidget
 import pyqtgraph as pg
 
 from  .helpers import clear_rows, add_dock_shortcuts, pick_two_colors, override_colors, random_darkbg_colors, Blocker
+from .components.tbl_funcs import add_combo_column, add_check_column
 
 from .components.slist import SListMixin
 from .components.metrics import MetricsMixin
